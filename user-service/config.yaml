@@ -1,0 +1,28 @@
+http:
+  addr: ":8080"
+  read_header_timeout: 5s
+
+db:
+  host: postgres
+  port: 5432
+  user: radio
+  name: radio_users
+  sslmode: disable
+  ping_timeout: 5s
+  max_open_conns: 10
+  max_idle_conns: 5
+  conn_max_lifetime: 1h
+
+auth:
+  token_ttl: 24h
+  cleanup_interval: 1m
+
+validation:
+  username_min_length: 3
+  username_max_length: 32
+  password_min_length: 8
+  password_max_length: 72
+
+bcrypt:
+  cost: 10
+  max_concurrent: 4

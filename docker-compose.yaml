@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: radio
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_DB: radio
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U radio"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  user-service-migrations:
+    image: liquibase/liquibase:4.33.0-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./user-service/migrations:/migrations:ro
+    command: >-
+      --search-path=/migrations
+      --changelog-file=changelog.yaml
+      --url=jdbc:postgresql://postgres:5432/radio_users
+      --username=radio
+      --password=${DB_PASSWORD:?DB_PASSWORD is required}
+      update
+
+  user-service:
+    build: ./user-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      user-service-migrations:
+        condition: service_completed_successfully
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - ./user-service/config.yaml:/app/config.yaml:ro
+    ports:
+      - "${USER_SERVICE_PORT:-18080}:8080"
+
+volumes:
+  pgdata:
