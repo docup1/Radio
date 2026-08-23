@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package content;
+
+option go_package = "radio/content-service/internal/api/grpc/pb;pb";
+
+// Access exposes internal authorization checks used by other microservices.
+service Access {
+  // Check reports whether the given user is allowed to access a song's audio,
+  // which requires the song to be public or owned by the user AND the
+  // underlying melody to exist.
+  rpc Check(AccessCheckRequest) returns (AccessCheckResponse);
+}
+
+message AccessCheckRequest {
+  string owner_id = 1;
+  string song_id = 2;
+}
+
+message AccessCheckResponse {
+  bool allowed = 1;
+}

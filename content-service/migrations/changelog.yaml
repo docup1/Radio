@@ -1,0 +1,312 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-create-melodies-table
+      author: radio
+      changes:
+        - createTable:
+            tableName: melodies
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: path
+                  type: varchar(512)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: content_type
+                  type: varchar(128)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: size
+                  type: bigint
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: hash
+                  type: varchar(64)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: created_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+      rollback:
+        - dropTable:
+            tableName: melodies
+
+  - changeSet:
+      id: 002-create-images-table
+      author: radio
+      changes:
+        - createTable:
+            tableName: images
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: path
+                  type: varchar(512)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: content_type
+                  type: varchar(128)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+      rollback:
+        - dropTable:
+            tableName: images
+
+  - changeSet:
+      id: 003-create-songs-table
+      author: radio
+      changes:
+        - sql:
+            dbms: postgresql
+            sql: |
+              CREATE TABLE songs (
+                  id UUID PRIMARY KEY,
+                  name VARCHAR(128) NOT NULL,
+                  description VARCHAR(512),
+                  owner_id UUID NOT NULL,
+                  is_public BOOLEAN NOT NULL DEFAULT FALSE,
+                  melody_id UUID NOT NULL REFERENCES melodies(id) ON DELETE RESTRICT,
+                  image_id UUID REFERENCES images(id) ON DELETE SET NULL,
+                  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                  search_vector tsvector GENERATED ALWAYS AS (
+                      to_tsvector('russian', coalesce(name, ''))
+                      || to_tsvector('english', coalesce(name, ''))
+                      || to_tsvector('russian', coalesce(description, ''))
+                      || to_tsvector('english', coalesce(description, ''))
+                  ) STORED
+              );
+              CREATE INDEX idx_songs_owner_id ON songs (owner_id);
+              CREATE INDEX idx_songs_public ON songs (id) WHERE is_public = true;
+              CREATE INDEX idx_songs_search_vector ON songs USING GIN (search_vector);
+      rollback:
+        - sql:
+            dbms: postgresql
+            sql: "DROP TABLE songs;"
+
+  - changeSet:
+      id: 004-create-playlists-table
+      author: radio
+      changes:
+        - createTable:
+            tableName: playlists
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: name
+                  type: varchar(128)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: owner_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: is_public
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+      rollback:
+        - dropTable:
+            tableName: playlists
+
+  - changeSet:
+      id: 005-create-playlists-indexes
+      author: radio
+      changes:
+        - createIndex:
+            indexName: idx_playlists_owner_id
+            tableName: playlists
+            columns:
+              - column:
+                  name: owner_id
+        - createIndex:
+            indexName: idx_playlists_public
+            tableName: playlists
+            where: "is_public = true"
+            columns:
+              - column:
+                  name: id
+      rollback:
+        - dropIndex:
+            indexName: idx_playlists_owner_id
+            tableName: playlists
+        - dropIndex:
+            indexName: idx_playlists_public
+            tableName: playlists
+
+  - changeSet:
+      id: 006-create-playlist-songs-table
+      author: radio
+      changes:
+        - createTable:
+            tableName: playlist_songs
+            columns:
+              - column:
+                  name: playlist_id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+                    foreignKeyName: fk_playlist_songs_playlist_id
+                    references: playlists(id)
+                    deleteCascade: true
+              - column:
+                  name: song_id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+                    foreignKeyName: fk_playlist_songs_song_id
+                    references: songs(id)
+                    deleteCascade: true
+              - column:
+                  name: position
+                  type: int
+                  constraints:
+                    nullable: false
+      rollback:
+        - dropTable:
+            tableName: playlist_songs
+
+  - changeSet:
+      id: 007-create-playlist-songs-order-index
+      author: radio
+      changes:
+        - createIndex:
+            indexName: idx_playlist_songs_order
+            tableName: playlist_songs
+            unique: true
+            columns:
+              - column:
+                  name: playlist_id
+              - column:
+                  name: position
+      rollback:
+        - dropIndex:
+            indexName: idx_playlist_songs_order
+            tableName: playlist_songs
+
+  - changeSet:
+      id: 008-create-upload-sessions-table
+      author: radio
+      changes:
+        - createTable:
+            tableName: upload_sessions
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: owner_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: media_type
+                  type: varchar(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: varchar(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: content_type
+                  type: varchar(128)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: total_chunks
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: received_chunks
+                  type: int
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: final_path
+                  type: varchar(512)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: size
+                  type: bigint
+                  constraints:
+                    nullable: true
+              - column:
+                  name: hash
+                  type: varchar(64)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: created_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+        - createIndex:
+            indexName: idx_upload_sessions_owner_id
+            tableName: upload_sessions
+            columns:
+              - column:
+                  name: owner_id
+      rollback:
+        - dropTable:
+            tableName: upload_sessions

@@ -31,3 +31,19 @@ down:
 
 clean:
 	rm -rf $(SERVICE_DIR)/bin
+
+# ---- content-service ----
+CS_DIR := content-service
+CS_BINS := public stream access
+CS_PORTS := 18090 18091 18092
+
+.PHONY: cs-build cs-dev cs-down
+cs-build:
+	echo "building content-service linux/$(GOARCH) binaries"
+	cd $(CS_DIR) && for b in $(CS_BINS); do CGO_ENABLED=0 GOOS=linux GOARCH=$(GOARCH) go build -ldflags="-s -w" -o bin/$$b ./cmd/$$b; done
+cs-dev: cs-build
+	echo "freeing content-service ports $(CS_PORTS)"
+	for p in $(CS_PORTS); do lsof -ti tcp:$$p -sTCP:LISTEN 2>/dev/null | while read pid; do cmd=$$(ps -o command= -p $$pid 2>/dev/null); case "$$cmd" in *OrbStack*|*com.docker*|*Docker*) echo "skip $$pid (container port binding)";; *) echo "killing $$pid ($$cmd)"; kill -9 $$pid 2>/dev/null || true;; esac; done; done
+	docker compose up -d --build --force-recreate content-service-migrations content-service-public content-service-stream content-service-access
+cs-down:
+	docker compose stop content-service-migrations content-service-public content-service-stream content-service-access

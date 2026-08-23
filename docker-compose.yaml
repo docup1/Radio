@@ -46,5 +46,68 @@ services:
     ports:
       - "${USER_SERVICE_PORT:-18080}:8080"
 
+  content-service-migrations:
+    image: liquibase/liquibase:4.33.0-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./content-service/migrations:/migrations:ro
+    command: >-
+      --search-path=/migrations
+      --changelog-file=changelog.yaml
+      --url=jdbc:postgresql://postgres:5432/radio_content
+      --username=radio
+      --password=${DB_PASSWORD:?DB_PASSWORD is required}
+      update
+
+  content-service-public:
+    build: ./content-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      content-service-migrations:
+        condition: service_completed_successfully
+    environment:
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - content-storage:/data
+      - ./content-service/config.yaml:/app/config.yaml:ro
+    ports:
+      - "18090:8080"
+    command: ["/usr/local/bin/public"]
+
+  content-service-stream:
+    build: ./content-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      content-service-migrations:
+        condition: service_completed_successfully
+    environment:
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - content-storage:/data
+      - ./content-service/config.yaml:/app/config.yaml:ro
+    ports:
+      - "18091:8081"
+    command: ["/usr/local/bin/stream"]
+
+  content-service-access:
+    build: ./content-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      content-service-migrations:
+        condition: service_completed_successfully
+    environment:
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - ./content-service/config.yaml:/app/config.yaml:ro
+    ports:
+      - "18092:8082"
+    command: ["/usr/local/bin/access"]
+
 volumes:
   pgdata:
+  content-storage:
