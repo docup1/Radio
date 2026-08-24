@@ -384,12 +384,13 @@ func (r *PlaylistRepository) OwnerOf(_ context.Context, id uuid.UUID) (uuid.UUID
 
 // PlaylistSongRepository is an in-memory implementation of interfaces.PlaylistSongRepository.
 type PlaylistSongRepository struct {
-	mu sync.RWMutex
-	m  map[uuid.UUID][]models.PlaylistSong
+	mu    sync.RWMutex
+	m     map[uuid.UUID][]models.PlaylistSong
+	songs *SongRepository
 }
 
-func NewPlaylistSongRepository() *PlaylistSongRepository {
-	return &PlaylistSongRepository{m: make(map[uuid.UUID][]models.PlaylistSong)}
+func NewPlaylistSongRepository(songs *SongRepository) *PlaylistSongRepository {
+	return &PlaylistSongRepository{m: make(map[uuid.UUID][]models.PlaylistSong), songs: songs}
 }
 
 func (r *PlaylistSongRepository) Add(_ context.Context, ps models.PlaylistSong) error {
@@ -448,6 +449,20 @@ func (r *PlaylistSongRepository) List(_ context.Context, playlistID uuid.UUID) (
 	list := append([]models.PlaylistSong(nil), r.m[playlistID]...)
 	sort.Slice(list, func(i, j int) bool { return list[i].Position < list[j].Position })
 	return list, nil
+}
+
+func (r *PlaylistSongRepository) ListSongs(_ context.Context, playlistID uuid.UUID) ([]models.Song, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	list := append([]models.PlaylistSong(nil), r.m[playlistID]...)
+	sort.Slice(list, func(i, j int) bool { return list[i].Position < list[j].Position })
+	out := make([]models.Song, 0, len(list))
+	for _, e := range list {
+		if s, ok := r.songs.m[e.SongID]; ok {
+			out = append(out, s)
+		}
+	}
+	return out, nil
 }
 
 func (r *PlaylistSongRepository) MaxPosition(_ context.Context, playlistID uuid.UUID) (int, error) {

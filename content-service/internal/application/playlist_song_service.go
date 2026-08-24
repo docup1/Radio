@@ -78,3 +78,16 @@ func (s *PlaylistSongService) Move(ctx context.Context, playlistID, owner, songI
 	}
 	return s.PlaylistSongs.Move(ctx, playlistID, songID, position)
 }
+
+// List returns the playlist's songs in playback order. The caller must own the
+// playlist.
+func (s *PlaylistSongService) List(ctx context.Context, playlistID, owner uuid.UUID) ([]models.Song, error) {
+	po, err := s.Playlists.OwnerOf(ctx, playlistID)
+	if err != nil {
+		return nil, err
+	}
+	if po != owner {
+		return nil, interfaces.ErrForbidden
+	}
+	return s.PlaylistSongs.ListSongs(ctx, playlistID)
+}

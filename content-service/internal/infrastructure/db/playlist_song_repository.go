@@ -67,6 +67,33 @@ func (r *PlaylistSongRepository) List(ctx context.Context, playlistID uuid.UUID)
 	return out, rows.Err()
 }
 
+// ListSongs returns the playlist's songs joined with the songs table, ordered by
+// position. Used by the playlist detail view.
+func (r *PlaylistSongRepository) ListSongs(ctx context.Context, playlistID uuid.UUID) ([]models.Song, error) {
+	rows, err := r.DB.QueryContext(ctx,
+		`SELECT s.id, s.name, s.description, s.owner_id, s.is_public, s.melody_id, s.image_id, s.created_at, s.updated_at
+		   FROM playlist_songs ps JOIN songs s ON s.id = ps.song_id
+		  WHERE ps.playlist_id = $1 ORDER BY ps.position ASC`,
+		playlistID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]models.Song, 0, 8)
+	for rows.Next() {
+		var s models.Song
+		var desc sql.NullString
+		var img uuid.NullUUID
+		if err := rows.Scan(songDests(&s, &desc, &img)...); err != nil {
+			return nil, err
+		}
+		s.Description = desc.String
+		s.ImageID = img
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
 func (r *PlaylistSongRepository) MaxPosition(ctx context.Context, playlistID uuid.UUID) (int, error) {
 	var max sql.NullInt32
 	err := r.DB.QueryRowContext(ctx,

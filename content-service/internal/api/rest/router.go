@@ -50,12 +50,14 @@ func NewHandler(svc *application.Services, db *sql.DB, swaggerEnabled bool, swag
 	mux.HandleFunc("POST /images", himage.Create(svc))
 	mux.HandleFunc("GET /images", himage.List(svc))
 	mux.HandleFunc("GET /images/{id}", himage.Get(svc))
+	mux.HandleFunc("GET /images/{id}/file", himage.ServeFile(svc))
 	mux.HandleFunc("PUT /images/{id}", himage.Update(svc))
 	mux.HandleFunc("DELETE /images/{id}", himage.Delete(svc))
 
 	mux.HandleFunc("POST /playlists", hplaylist.Create(svc))
 	mux.HandleFunc("GET /playlists", hplaylist.List(svc))
 	mux.HandleFunc("GET /playlists/{id}", hplaylist.Get(svc))
+	mux.HandleFunc("GET /playlists/{id}/songs", hplaylist.ListSongs(svc))
 	mux.HandleFunc("PUT /playlists/{id}", hplaylist.Update(svc))
 	mux.HandleFunc("DELETE /playlists/{id}", hplaylist.Delete(svc))
 
