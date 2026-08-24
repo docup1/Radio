@@ -15,6 +15,7 @@ import (
 type UploadService struct {
 	UploadSessions interfaces.UploadSessionRepository
 	Melodies       interfaces.MelodyRepository
+	Images         interfaces.ImageRepository
 	Chunks         interfaces.ChunkStore
 	FinalRoot      string
 	MaxChunkSize   int64
@@ -37,10 +38,14 @@ type AddChunkInput struct {
 }
 
 func (s *UploadService) Init(ctx context.Context, owner uuid.UUID, in InitUploadInput) (*models.UploadSession, error) {
-	if in.MediaType != models.MediaTypeAudio {
+	if in.MediaType != models.MediaTypeAudio && in.MediaType != models.MediaTypeImage {
 		return nil, interfaces.ErrInvalid
 	}
-	if in.ContentType == "" || len(in.ContentType) > models.MelodyContentTypeMaxLength {
+	maxCT := models.MelodyContentTypeMaxLength
+	if in.MediaType == models.MediaTypeImage {
+		maxCT = models.ImageContentTypeMaxLength
+	}
+	if in.ContentType == "" || len(in.ContentType) > maxCT {
 		return nil, interfaces.ErrInvalid
 	}
 	if in.TotalChunks <= 0 {
@@ -114,9 +119,17 @@ func (s *UploadService) AddChunk(ctx context.Context, owner uuid.UUID, sessionID
 	return nil
 }
 
+// ConfirmResult is the outcome of a completed upload. Exactly one of Melody or
+// Image is set, matching the session's media type.
+type ConfirmResult struct {
+	Melody *models.Melody
+	Image  *models.Image
+}
+
 // Confirm verifies all chunks are present and (when provided) that the assembled
-// file matches the expected size and sha256, then creates the melody record.
-func (s *UploadService) Confirm(ctx context.Context, owner uuid.UUID, sessionID uuid.UUID) (*models.Melody, error) {
+// file matches the expected size and sha256, then creates the melody (audio) or
+// image (cover) record depending on the session's media type.
+func (s *UploadService) Confirm(ctx context.Context, owner uuid.UUID, sessionID uuid.UUID) (*ConfirmResult, error) {
 	session, err := s.UploadSessions.Get(ctx, sessionID)
 	if err != nil {
 		return nil, err
@@ -161,6 +174,32 @@ func (s *UploadService) Confirm(ctx context.Context, owner uuid.UUID, sessionID 
 		return nil, interfaces.ErrInvalid
 	}
 
+	status := models.UploadStatusCompleted
+	if err := s.UploadSessions.Update(ctx, sessionID, interfaces.UploadSessionPatch{
+		Status:    &status,
+		FinalPath: &finalPath,
+		Size:      &size,
+		Hash:      &hash,
+	}); err != nil {
+		return nil, err
+	}
+	_ = s.Chunks.Delete(sessionID)
+
+	if session.MediaType == models.MediaTypeImage {
+		img := models.Image{
+			ID:          uuid.New(),
+			Path:        finalPath,
+			ContentType: session.ContentType,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		}
+		if err := s.Images.Create(ctx, img); err != nil {
+			_ = removeFile(finalPath)
+			return nil, err
+		}
+		return &ConfirmResult{Image: &img}, nil
+	}
+
 	melody := models.Melody{
 		ID:          uuid.New(),
 		Path:        finalPath,
@@ -172,21 +211,9 @@ func (s *UploadService) Confirm(ctx context.Context, owner uuid.UUID, sessionID 
 	}
 	if err := s.Melodies.Create(ctx, melody); err != nil {
 		_ = removeFile(finalPath)
-		_ = s.Chunks.Delete(sessionID)
 		return nil, err
 	}
-
-	status := models.UploadStatusCompleted
-	if err := s.UploadSessions.Update(ctx, sessionID, interfaces.UploadSessionPatch{
-		Status:    &status,
-		FinalPath: &finalPath,
-		Size:      &size,
-		Hash:      &hash,
-	}); err != nil {
-		return nil, err
-	}
-	_ = s.Chunks.Delete(sessionID)
-	return &melody, nil
+	return &ConfirmResult{Melody: &melody}, nil
 }
 
 func removeFile(path string) error {

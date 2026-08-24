@@ -9,6 +9,7 @@ import (
 // Media types accepted by the chunked upload flow.
 const (
 	MediaTypeAudio = "audio"
+	MediaTypeImage = "image"
 )
 
 // Upload session lifecycle states.

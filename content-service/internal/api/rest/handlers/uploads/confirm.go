@@ -7,7 +7,7 @@ import (
 	"radio/content-service/internal/application"
 )
 
-// Confirm assembles the uploaded chunks into a melody.
+// Confirm assembles the uploaded chunks into a melody (audio) or image (cover).
 //
 //	@Summary	Confirm upload
 //	@Tags		uploads
@@ -31,11 +31,15 @@ func Confirm(svc *application.Services) http.HandlerFunc {
 			common.WriteError(w, http.StatusBadRequest, "invalid id")
 			return
 		}
-		melody, err := svc.Uploads.Confirm(r.Context(), owner, id)
+		res, err := svc.Uploads.Confirm(r.Context(), owner, id)
 		if err != nil {
 			common.WriteServiceError(w, err)
 			return
 		}
-		common.WriteJSON(w, http.StatusCreated, melody)
+		if res.Image != nil {
+			common.WriteJSON(w, http.StatusCreated, res.Image)
+			return
+		}
+		common.WriteJSON(w, http.StatusCreated, res.Melody)
 	}
 }

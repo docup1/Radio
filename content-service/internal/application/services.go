@@ -54,6 +54,7 @@ func New(repos Repos, storage StorageParams) *Services {
 		Uploads: &UploadService{
 			UploadSessions: repos.UploadSessions,
 			Melodies:       repos.Melodies,
+			Images:         repos.Images,
 			Chunks:         storage.ChunkStore,
 			FinalRoot:      storage.FinalRoot,
 			MaxChunkSize:   storage.MaxChunkSize,
