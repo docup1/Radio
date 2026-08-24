@@ -7,6 +7,7 @@ import (
 
 	"radio/content-service/internal/application"
 	"radio/content-service/internal/domain/interfaces"
+	"radio/content-service/internal/domain/models"
 )
 
 // NewPublicHandler builds the user-facing HTTP API. Every request carries the
@@ -99,7 +100,8 @@ func listSongs(svc *application.Services) http.HandlerFunc {
 			return
 		}
 		limit, offset := parsePagination(r)
-		songs, err := svc.Songs.List(r.Context(), owner, limit, offset)
+		scope := models.ParseSongScope(r.URL.Query().Get("scope"))
+		songs, err := svc.Songs.List(r.Context(), owner, scope, limit, offset)
 		if err != nil {
 			WriteServiceError(w, err)
 			return
@@ -120,7 +122,8 @@ func searchSongs(svc *application.Services) http.HandlerFunc {
 			return
 		}
 		limit, offset := parsePagination(r)
-		songs, err := svc.Songs.Search(r.Context(), q, owner, limit, offset)
+		scope := models.ParseSongScope(r.URL.Query().Get("scope"))
+		songs, err := svc.Songs.Search(r.Context(), q, owner, scope, limit, offset)
 		if err != nil {
 			WriteServiceError(w, err)
 			return

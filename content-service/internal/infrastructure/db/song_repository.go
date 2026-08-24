@@ -37,11 +37,21 @@ func (r *SongRepository) GetVisible(ctx context.Context, id, viewer uuid.UUID) (
 	return s, err
 }
 
-func (r *SongRepository) ListVisible(ctx context.Context, viewer uuid.UUID, limit, offset int) ([]models.Song, error) {
+func (r *SongRepository) ListVisible(ctx context.Context, viewer uuid.UUID, scope models.SongScope, limit, offset int) ([]models.Song, error) {
+	var where string
+	var args []any
+	switch scope {
+	case models.SongScopePublic:
+		where = "WHERE is_public = true AND owner_id <> $1"
+		args = []any{viewer, limit, offset}
+	default:
+		where = "WHERE owner_id = $1"
+		args = []any{viewer, limit, offset}
+	}
 	rows, err := r.DB.QueryContext(ctx,
 		`SELECT id, name, description, owner_id, is_public, melody_id, image_id, created_at, updated_at
-		   FROM songs WHERE owner_id = $1 OR is_public = true
-		 ORDER BY created_at DESC LIMIT $2 OFFSET $3`, viewer, limit, offset)
+		   FROM songs `+where+`
+		 ORDER BY created_at DESC LIMIT $2 OFFSET $3`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -93,14 +103,23 @@ func (r *SongRepository) Delete(ctx context.Context, id, owner uuid.UUID) error 
 	return nil
 }
 
-func (r *SongRepository) SearchVisible(ctx context.Context, q string, viewer uuid.UUID, limit, offset int) ([]models.Song, error) {
+func (r *SongRepository) SearchVisible(ctx context.Context, q string, viewer uuid.UUID, scope models.SongScope, limit, offset int) ([]models.Song, error) {
+	ts := "(websearch_to_tsquery('russian', $1) || websearch_to_tsquery('english', $1))"
+	var where string
+	var args []any
+	switch scope {
+	case models.SongScopePublic:
+		where = "WHERE " + ts + " AND is_public = true AND owner_id <> $2"
+		args = []any{q, viewer, limit, offset}
+	default:
+		where = "WHERE " + ts + " AND owner_id = $2"
+		args = []any{q, viewer, limit, offset}
+	}
 	rows, err := r.DB.QueryContext(ctx,
 		`SELECT id, name, description, owner_id, is_public, melody_id, image_id, created_at, updated_at
-		   FROM songs
-		  WHERE search_vector @@ (websearch_to_tsquery('russian', $1) || websearch_to_tsquery('english', $1))
-		    AND (owner_id = $2 OR is_public = true)
-		  ORDER BY ts_rank(search_vector, (websearch_to_tsquery('russian', $1) || websearch_to_tsquery('english', $1))) DESC
-		  LIMIT $3 OFFSET $4`, q, viewer, limit, offset)
+		   FROM songs `+where+`
+		  ORDER BY ts_rank(search_vector, `+ts+`) DESC
+		  LIMIT $3 OFFSET $4`, args...)
 	if err != nil {
 		return nil, pgError(err)
 	}

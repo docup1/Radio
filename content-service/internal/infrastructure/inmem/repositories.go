@@ -199,12 +199,16 @@ func (r *SongRepository) GetVisible(_ context.Context, id, viewer uuid.UUID) (*m
 	return &s, nil
 }
 
-func (r *SongRepository) ListVisible(_ context.Context, viewer uuid.UUID, limit, offset int) ([]models.Song, error) {
+func (r *SongRepository) ListVisible(_ context.Context, viewer uuid.UUID, scope models.SongScope, limit, offset int) ([]models.Song, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := make([]models.Song, 0, len(r.m))
 	for _, s := range r.m {
-		if s.OwnerID == viewer || s.IsPublic {
+		if scope == models.SongScopePublic {
+			if s.IsPublic && s.OwnerID != viewer {
+				out = append(out, s)
+			}
+		} else if s.OwnerID == viewer {
 			out = append(out, s)
 		}
 	}
@@ -250,13 +254,19 @@ func (r *SongRepository) Delete(_ context.Context, id, owner uuid.UUID) error {
 	return nil
 }
 
-func (r *SongRepository) SearchVisible(_ context.Context, q string, viewer uuid.UUID, limit, offset int) ([]models.Song, error) {
+func (r *SongRepository) SearchVisible(_ context.Context, q string, viewer uuid.UUID, scope models.SongScope, limit, offset int) ([]models.Song, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	needle := strings.ToLower(q)
 	out := make([]models.Song, 0, len(r.m))
 	for _, s := range r.m {
-		if !(s.OwnerID == viewer || s.IsPublic) {
+		var visible bool
+		if scope == models.SongScopePublic {
+			visible = s.IsPublic && s.OwnerID != viewer
+		} else {
+			visible = s.OwnerID == viewer
+		}
+		if !visible {
 			continue
 		}
 		hay := strings.ToLower(s.Name + " " + s.Description)

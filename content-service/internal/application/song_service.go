@@ -68,15 +68,15 @@ func (s *SongService) Get(ctx context.Context, id, viewer uuid.UUID) (*models.So
 	return s.Songs.GetVisible(ctx, id, viewer)
 }
 
-func (s *SongService) List(ctx context.Context, viewer uuid.UUID, limit, offset int) ([]models.Song, error) {
-	return s.Songs.ListVisible(ctx, viewer, limit, offset)
+func (s *SongService) List(ctx context.Context, viewer uuid.UUID, scope models.SongScope, limit, offset int) ([]models.Song, error) {
+	return s.Songs.ListVisible(ctx, viewer, scope, limit, offset)
 }
 
-func (s *SongService) Search(ctx context.Context, q string, viewer uuid.UUID, limit, offset int) ([]models.Song, error) {
+func (s *SongService) Search(ctx context.Context, q string, viewer uuid.UUID, scope models.SongScope, limit, offset int) ([]models.Song, error) {
 	if strings.TrimSpace(q) == "" {
 		return nil, interfaces.ErrInvalid
 	}
-	return s.Songs.SearchVisible(ctx, q, viewer, limit, offset)
+	return s.Songs.SearchVisible(ctx, q, viewer, scope, limit, offset)
 }
 
 func (s *SongService) Update(ctx context.Context, id, owner uuid.UUID, patch interfaces.SongPatch) error {
