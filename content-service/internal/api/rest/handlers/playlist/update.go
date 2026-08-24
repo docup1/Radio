@@ -42,9 +42,6 @@ func Update(svc *application.Services) http.HandlerFunc {
 		if req.Name != nil {
 			patch.Name = req.Name
 		}
-		if req.IsPublic != nil {
-			patch.IsPublic = req.IsPublic
-		}
 		if err := svc.Playlists.Update(r.Context(), id, owner, patch); err != nil {
 			common.WriteServiceError(w, err)
 			return

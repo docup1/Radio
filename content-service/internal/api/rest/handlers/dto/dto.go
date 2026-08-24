@@ -27,13 +27,11 @@ type UpdateMelodyRequest struct {
 }
 
 type CreatePlaylistRequest struct {
-	Name     string `json:"name"`
-	IsPublic bool   `json:"is_public"`
+	Name string `json:"name"`
 }
 
 type UpdatePlaylistRequest struct {
-	Name     *string `json:"name"`
-	IsPublic *bool   `json:"is_public"`
+	Name *string `json:"name"`
 }
 
 type AddSongRequest struct {

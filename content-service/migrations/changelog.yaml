@@ -132,12 +132,6 @@ databaseChangeLog:
                   constraints:
                     nullable: false
               - column:
-                  name: is_public
-                  type: boolean
-                  defaultValueBoolean: false
-                  constraints:
-                    nullable: false
-              - column:
                   name: created_at
                   type: timestamptz
                   defaultValueComputed: now()
@@ -163,19 +157,9 @@ databaseChangeLog:
             columns:
               - column:
                   name: owner_id
-        - createIndex:
-            indexName: idx_playlists_public
-            tableName: playlists
-            where: "is_public = true"
-            columns:
-              - column:
-                  name: id
       rollback:
         - dropIndex:
             indexName: idx_playlists_owner_id
-            tableName: playlists
-        - dropIndex:
-            indexName: idx_playlists_public
             tableName: playlists
 
   - changeSet:

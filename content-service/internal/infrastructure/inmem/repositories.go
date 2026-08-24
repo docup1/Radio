@@ -317,7 +317,7 @@ func (r *PlaylistRepository) GetVisible(_ context.Context, id, viewer uuid.UUID)
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	p, ok := r.m[id]
-	if !ok || !(p.OwnerID == viewer || p.IsPublic) {
+	if !ok || p.OwnerID != viewer {
 		return nil, interfaces.ErrNotFound
 	}
 	return &p, nil
@@ -328,7 +328,7 @@ func (r *PlaylistRepository) ListVisible(_ context.Context, viewer uuid.UUID, li
 	defer r.mu.RUnlock()
 	out := make([]models.Playlist, 0, len(r.m))
 	for _, p := range r.m {
-		if p.OwnerID == viewer || p.IsPublic {
+		if p.OwnerID == viewer {
 			out = append(out, p)
 		}
 	}
@@ -345,9 +345,6 @@ func (r *PlaylistRepository) Update(_ context.Context, id, owner uuid.UUID, patc
 	}
 	if patch.Name != nil {
 		p.Name = *patch.Name
-	}
-	if patch.IsPublic != nil {
-		p.IsPublic = *patch.IsPublic
 	}
 	p.UpdatedAt = time.Now()
 	r.m[id] = p

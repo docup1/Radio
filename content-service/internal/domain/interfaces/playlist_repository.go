@@ -19,6 +19,5 @@ type PlaylistRepository interface {
 }
 
 type PlaylistPatch struct {
-	Name     *string
-	IsPublic *bool
+	Name *string
 }

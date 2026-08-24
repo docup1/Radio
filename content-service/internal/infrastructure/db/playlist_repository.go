@@ -15,16 +15,16 @@ type PlaylistRepository struct{ DB *sql.DB }
 
 func (r *PlaylistRepository) Create(ctx context.Context, p models.Playlist) error {
 	_, err := r.DB.ExecContext(ctx,
-		`INSERT INTO playlists (id, name, owner_id, is_public) VALUES ($1, $2, $3, $4)`,
-		p.ID, p.Name, p.OwnerID, p.IsPublic)
+		`INSERT INTO playlists (id, name, owner_id) VALUES ($1, $2, $3)`,
+		p.ID, p.Name, p.OwnerID)
 	return err
 }
 
 func (r *PlaylistRepository) GetVisible(ctx context.Context, id, viewer uuid.UUID) (*models.Playlist, error) {
 	p := &models.Playlist{}
 	err := r.DB.QueryRowContext(ctx,
-		`SELECT id, name, owner_id, is_public, created_at, updated_at FROM playlists WHERE id = $1 AND (owner_id = $2 OR is_public = true)`,
-		id, viewer).Scan(&p.ID, &p.Name, &p.OwnerID, &p.IsPublic, &p.CreatedAt, &p.UpdatedAt)
+		`SELECT id, name, owner_id, created_at, updated_at FROM playlists WHERE id = $1 AND owner_id = $2`,
+		id, viewer).Scan(&p.ID, &p.Name, &p.OwnerID, &p.CreatedAt, &p.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, interfaces.ErrNotFound
 	}
@@ -33,7 +33,7 @@ func (r *PlaylistRepository) GetVisible(ctx context.Context, id, viewer uuid.UUI
 
 func (r *PlaylistRepository) ListVisible(ctx context.Context, viewer uuid.UUID, limit, offset int) ([]models.Playlist, error) {
 	rows, err := r.DB.QueryContext(ctx,
-		`SELECT id, name, owner_id, is_public, created_at, updated_at FROM playlists WHERE owner_id = $1 OR is_public = true
+		`SELECT id, name, owner_id, created_at, updated_at FROM playlists WHERE owner_id = $1
 		 ORDER BY created_at DESC LIMIT $2 OFFSET $3`, viewer, limit, offset)
 	if err != nil {
 		return nil, err
@@ -42,7 +42,7 @@ func (r *PlaylistRepository) ListVisible(ctx context.Context, viewer uuid.UUID, 
 	out := make([]models.Playlist, 0, limit)
 	for rows.Next() {
 		var p models.Playlist
-		if err := rows.Scan(&p.ID, &p.Name, &p.OwnerID, &p.IsPublic, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.OwnerID, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
@@ -54,10 +54,9 @@ func (r *PlaylistRepository) Update(ctx context.Context, id, owner uuid.UUID, pa
 	res, err := r.DB.ExecContext(ctx,
 		`UPDATE playlists
 		 SET name = COALESCE($1, name),
-		     is_public = COALESCE($2, is_public),
 		     updated_at = now()
-		 WHERE id = $3 AND owner_id = $4`,
-		patch.Name, patch.IsPublic, id, owner)
+		 WHERE id = $2 AND owner_id = $3`,
+		patch.Name, id, owner)
 	if err != nil {
 		return err
 	}

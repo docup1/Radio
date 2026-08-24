@@ -31,7 +31,7 @@ func Create(svc *application.Services) http.HandlerFunc {
 			common.WriteError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
-		p, err := svc.Playlists.Create(r.Context(), owner, application.CreatePlaylistInput{Name: req.Name, IsPublic: req.IsPublic})
+		p, err := svc.Playlists.Create(r.Context(), owner, application.CreatePlaylistInput{Name: req.Name})
 		if err != nil {
 			common.WriteServiceError(w, err)
 			return

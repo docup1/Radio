@@ -16,8 +16,7 @@ type PlaylistService struct {
 }
 
 type CreatePlaylistInput struct {
-	Name     string
-	IsPublic bool
+	Name string
 }
 
 func (s *PlaylistService) Create(ctx context.Context, owner uuid.UUID, in CreatePlaylistInput) (*models.Playlist, error) {
@@ -28,7 +27,6 @@ func (s *PlaylistService) Create(ctx context.Context, owner uuid.UUID, in Create
 		ID:        uuid.New(),
 		Name:      in.Name,
 		OwnerID:   owner,
-		IsPublic:  in.IsPublic,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
