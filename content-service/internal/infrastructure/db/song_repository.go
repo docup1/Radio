@@ -109,10 +109,10 @@ func (r *SongRepository) SearchVisible(ctx context.Context, q string, viewer uui
 	var args []any
 	switch scope {
 	case models.SongScopePublic:
-		where = "WHERE " + ts + " AND is_public = true AND owner_id <> $2"
+		where = "WHERE search_vector @@ (" + ts + ") AND is_public = true AND owner_id <> $2"
 		args = []any{q, viewer, limit, offset}
 	default:
-		where = "WHERE " + ts + " AND owner_id = $2"
+		where = "WHERE search_vector @@ (" + ts + ") AND owner_id = $2"
 		args = []any{q, viewer, limit, offset}
 	}
 	rows, err := r.DB.QueryContext(ctx,
