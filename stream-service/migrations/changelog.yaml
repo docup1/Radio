@@ -180,3 +180,151 @@ databaseChangeLog:
         - dropIndex:
             indexName: idx_hashtags_stream_id
             tableName: hashtags
+
+  - changeSet:
+      id: 006-add-streams-revision
+      author: radio
+      changes:
+        - addColumn:
+            tableName: streams
+            columns:
+              - column:
+                  name: revision
+                  type: bigint
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+      rollback:
+        - dropColumn:
+            tableName: streams
+            columnName: revision
+
+  - changeSet:
+      id: 007-create-stream-state-table
+      author: radio
+      changes:
+        - createTable:
+            tableName: stream_state
+            columns:
+              - column:
+                  name: stream_id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+                    foreignKeyName: fk_stream_state_stream_id
+                    references: streams(id)
+                    deleteCascade: true
+              - column:
+                  name: current_queue_id
+                  type: uuid
+                  constraints:
+                    nullable: true
+                    foreignKeyName: fk_stream_state_current_queue_id
+                    references: stream_queue(id)
+                    deleteSetNull: true
+              - column:
+                  name: started_at
+                  type: timestamptz
+                  constraints:
+                    nullable: true
+              - column:
+                  name: revision
+                  type: bigint
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+      rollback:
+        - dropTable:
+            tableName: stream_state
+
+  - changeSet:
+      id: 008-create-outbox-table
+      author: radio
+      changes:
+        - createTable:
+            tableName: outbox
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: aggregate_type
+                  type: varchar(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: aggregate_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: event_type
+                  type: varchar(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: payload
+                  type: jsonb
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+              - column:
+                  name: processed_at
+                  type: timestamptz
+                  constraints:
+                    nullable: true
+        - createIndex:
+            indexName: idx_outbox_processed_at
+            tableName: outbox
+            columns:
+              - column:
+                  name: processed_at
+        - createIndex:
+            indexName: idx_outbox_aggregate_id
+            tableName: outbox
+            columns:
+              - column:
+                  name: aggregate_id
+      rollback:
+        - dropTable:
+            tableName: outbox
+
+  - changeSet:
+      id: 009-fix-stream-state-fk-set-null
+      author: radio
+      changes:
+        - dropForeignKeyConstraint:
+            baseTableName: stream_state
+            constraintName: fk_stream_state_current_queue_id
+        - addForeignKeyConstraint:
+            baseTableName: stream_state
+            baseColumnNames: current_queue_id
+            constraintName: fk_stream_state_current_queue_id
+            referencedTableName: stream_queue
+            referencedColumnNames: id
+            onDelete: SET NULL
+      rollback:
+        - dropForeignKeyConstraint:
+            baseTableName: stream_state
+            constraintName: fk_stream_state_current_queue_id
+        - addForeignKeyConstraint:
+            baseTableName: stream_state
+            baseColumnNames: current_queue_id
+            constraintName: fk_stream_state_current_queue_id
+            referencedTableName: stream_queue
+            referencedColumnNames: id
