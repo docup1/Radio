@@ -1,0 +1,26 @@
+env: dev
+server:
+  addr: ":8080"
+  read_header_timeout: 5s
+upstreams:
+  user_service: "http://user-service:8080"
+  content_service: "http://content-service:8080"
+  content_stream: "http://content-service:8081"
+cookie:
+  name: "access_token"
+  path: "/"
+  max_age: 86400
+  secure_in_prod: true
+cors:
+  allowed_origins:
+    - "http://localhost:3000"
+  allowed_methods:
+    - GET
+    - POST
+    - PUT
+    - DELETE
+    - OPTIONS
+swagger:
+  enabled: true
+  path: "/swagger"
+  spec_file: "docs/swagger.json"

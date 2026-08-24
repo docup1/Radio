@@ -17,16 +17,14 @@ COMPOSE := docker compose -f $(CURDIR)/../docker-compose.yaml
 generate:
 	$(SWAG) init -g internal/api/rest/doc.go -o docs --parseInternal --ot json,yaml
 
-# Build the Linux binaries (used by the Docker images). Always regenerates
+# Build the single Linux binary (used by the Docker image). Always regenerates
 # the Swagger docs first so they never drift from the endpoints.
 build: generate
-	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $(BINDIR)/public ./cmd/public
-	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $(BINDIR)/stream ./cmd/stream
-	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $(BINDIR)/access  ./cmd/access
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -ldflags="-s -w" -o $(BINDIR)/content-service ./cmd/content-service
 
-# Rebuild and (re)start the public + stream containers with Swagger enabled.
+# Rebuild and (re)start the content-service container with Swagger enabled.
 docker-build: build
-	$(COMPOSE) up -d --build content-service-public content-service-stream
+	$(COMPOSE) up -d --build content-service
 
 clean:
-	rm -f $(BINDIR)/public $(BINDIR)/stream $(BINDIR)/access
+	rm -f $(BINDIR)/content-service

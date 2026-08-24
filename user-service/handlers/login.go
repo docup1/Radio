@@ -5,12 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"time"
 
 	"radio/user-service/infra"
-
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 )
 
 type loginRequest struct {
@@ -26,10 +22,6 @@ const selectUserByUsername = `
 	SELECT id, password
 	FROM users
 	WHERE username = $1`
-
-const insertSession = `
-	INSERT INTO sessions (jti, user_id, expires_at)
-	VALUES ($1, $2, $3)`
 
 // LoginHandler authenticates a user and issues a session JWT.
 //
@@ -71,26 +63,7 @@ func LoginHandler(db *sql.DB, cfg *infra.Config, hasher *infra.Hasher) http.Hand
 			return
 		}
 
-		sessionID, err := uuid.NewV7()
-		if err != nil {
-			infra.WriteError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-		expiresAt := time.Now().Add(cfg.Auth.TokenTTL)
-		if _, err := db.ExecContext(r.Context(), insertSession, sessionID, id, expiresAt); err != nil {
-			infra.WriteError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-
-		now := time.Now()
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"sub":      id,
-			"jti":      sessionID.String(),
-			"username": req.Username,
-			"iat":      now.Unix(),
-			"exp":      expiresAt.Unix(),
-		})
-		signed, err := token.SignedString(cfg.JWTSecret)
+		signed, err := infra.IssueToken(db, cfg, id, req.Username)
 		if err != nil {
 			infra.WriteError(w, http.StatusInternalServerError, "internal error")
 			return

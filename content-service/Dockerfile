@@ -5,7 +5,6 @@ USER app
 WORKDIR /app
 COPY config.yaml ./
 COPY docs/ /app/docs/
-COPY bin/public /usr/local/bin/public
-COPY bin/stream /usr/local/bin/stream
-COPY bin/access /usr/local/bin/access
+COPY bin/content-service /usr/local/bin/content-service
 EXPOSE 8080 8081 8082
+ENTRYPOINT ["content-service"]

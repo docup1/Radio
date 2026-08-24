@@ -22,6 +22,7 @@ type registerRequest struct {
 type registerResponse struct {
 	ID       string `json:"id"`
 	Username string `json:"username"`
+	Token    string `json:"token"`
 }
 
 const insertUser = `
@@ -95,6 +96,12 @@ func RegisterHandler(db *sql.DB, cfg *infra.Config, hasher *infra.Hasher) http.H
 			return
 		}
 
-		infra.WriteJSON(w, http.StatusCreated, registerResponse{ID: createdID, Username: req.Username})
+		signed, err := infra.IssueToken(db, cfg, createdID, req.Username)
+		if err != nil {
+			infra.WriteError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+
+		infra.WriteJSON(w, http.StatusCreated, registerResponse{ID: createdID, Username: req.Username, Token: signed})
 	}
 }

@@ -1,0 +1,214 @@
+definitions:
+  content.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  user.AuthResponse:
+    properties:
+      id:
+        type: string
+      username:
+        type: string
+    type: object
+  user.Credentials:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    type: object
+  user.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  user.PasswordUpdate:
+    properties:
+      current_password:
+        type: string
+      new_password:
+        type: string
+    type: object
+info:
+  contact: {}
+paths:
+  /api/auth/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/user.Credentials'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/user.AuthResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/user.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/user.ErrorResponse'
+      summary: Log in
+      tags:
+      - auth
+  /api/auth/logout:
+    post:
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/user.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: Log out
+      tags:
+      - auth
+  /api/auth/me:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/user.AuthResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/user.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: Current user
+      tags:
+      - auth
+  /api/auth/password:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: passwords
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/user.PasswordUpdate'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/user.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/user.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: Change password
+      tags:
+      - auth
+  /api/auth/register:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/user.Credentials'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/user.AuthResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/user.ErrorResponse'
+      summary: Register a new user (auto-login)
+      tags:
+      - auth
+  /api/content/songs:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/content.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: Proxy to content-service
+      tags:
+      - content
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/content.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: Proxy to content-service
+      tags:
+      - content
+  /api/content/songs/{id}:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/content.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: Proxy to content-service
+      tags:
+      - content
+  /api/content/songs/{id}/audio:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/content.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: Proxy to content-service
+      tags:
+      - content
+swagger: "2.0"

@@ -45,8 +45,6 @@ services:
       SWAGGER_ENABLED: "true"
     volumes:
       - ./user-service/config.yaml:/app/config.yaml:ro
-    ports:
-      - "${USER_SERVICE_PORT:-18080}:8080"
 
   content-service-migrations:
     image: liquibase/liquibase:4.33.0-alpine
@@ -63,7 +61,7 @@ services:
       --password=${DB_PASSWORD:?DB_PASSWORD is required}
       update
 
-  content-service-public:
+  content-service:
     build: ./content-service
     depends_on:
       postgres:
@@ -78,53 +76,47 @@ services:
       - content-storage:/data
       - ./content-service/config.yaml:/app/config.yaml:ro
     ports:
-      - "18090:8080"
+      - "18092:8082"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
-    command: ["/usr/local/bin/public"]
 
-  content-service-stream:
-    build: ./content-service
+  gateway:
+    build: ./gateway
     depends_on:
       postgres:
         condition: service_healthy
+      user-service-migrations:
+        condition: service_completed_successfully
       content-service-migrations:
         condition: service_completed_successfully
+      user-service:
+        condition: service_started
+      content-service:
+        condition: service_started
     environment:
-      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       APP_ENV: dev
+      GATEWAY_ADDR: ":8080"
       SWAGGER_ENABLED: "true"
-    volumes:
-      - content-storage:/data
-      - ./content-service/config.yaml:/app/config.yaml:ro
+      USER_SERVICE_URL: "http://user-service:8080"
+      CONTENT_SERVICE_URL: "http://content-service:8080"
+      CONTENT_STREAM_URL: "http://content-service:8081"
+      COOKIE_NAME: "access_token"
+      COOKIE_MAX_AGE: "86400"
+      COOKIE_SECURE_IN_PROD: "true"
+      CORS_ALLOWED_ORIGINS: "http://localhost:3000"
     ports:
-      - "18091:8081"
+      - "18000:8080"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8081/healthz"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
-    command: ["/usr/local/bin/stream"]
-
-  content-service-access:
-    build: ./content-service
-    depends_on:
-      postgres:
-        condition: service_healthy
-      content-service-migrations:
-        condition: service_completed_successfully
-    environment:
-      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
-    volumes:
-      - ./content-service/config.yaml:/app/config.yaml:ro
-    ports:
-      - "18092:8082"
-    command: ["/usr/local/bin/access"]
+    command: ["/usr/local/bin/gateway"]
 
 volumes:
   pgdata:
