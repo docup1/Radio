@@ -5,6 +5,8 @@ import (
 	"io/fs"
 	"net/http"
 
+	"github.com/google/uuid"
+
 	"radio/content-service/internal/application"
 	"radio/content-service/internal/domain/interfaces"
 )
@@ -30,9 +32,18 @@ func SongAudio(svc *application.Services, files interfaces.FileOpener) http.Hand
 			WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		userID, err := uuidQuery(r, "user_id")
-		if err != nil {
+		// Prefer X-Owner-ID header (set by gateway), fall back to user_id query for direct calls.
+		userIDStr := r.Header.Get("X-Owner-ID")
+		if userIDStr == "" {
+			userIDStr = r.URL.Query().Get("user_id")
+		}
+		if userIDStr == "" {
 			WriteError(w, http.StatusBadRequest, "missing user_id")
+			return
+		}
+		userID, err := uuid.Parse(userIDStr)
+		if err != nil {
+			WriteError(w, http.StatusBadRequest, "invalid user_id")
 			return
 		}
 		song, err := svc.Songs.Get(r.Context(), songID, userID)

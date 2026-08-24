@@ -39,6 +39,11 @@ func (h *Handler) content(w http.ResponseWriter, r *http.Request) {
 	target := h.restProxy
 	if infra.IsAudioPath(rest) {
 		target = h.streamProxy
+		// stream service expects user_id as query param (legacy) and/or X-Owner-ID header;
+		// set both for compatibility.
+		q := r.URL.Query()
+		q.Set("user_id", uid)
+		r.URL.RawQuery = q.Encode()
 	}
 	r.Header.Set("X-Owner-ID", uid)
 	target.ServeHTTP(w, r)
