@@ -29,6 +29,8 @@ type Service struct {
 	hub          *Hub
 	cfg          SenderConfig
 	client       *http.Client
+	// Per-song ETag cache: songID → etag
+	etagCache map[uuid.UUID]string
 }
 
 func NewService(streamClient StreamClient, hub *Hub, cfg SenderConfig) *Service {
@@ -37,6 +39,7 @@ func NewService(streamClient StreamClient, hub *Hub, cfg SenderConfig) *Service 
 		hub:          hub,
 		cfg:          cfg,
 		client:       &http.Client{Timeout: 30 * time.Second},
+		etagCache:    make(map[uuid.UUID]string),
 	}
 }
 
@@ -84,6 +87,10 @@ func (s *Service) OnSongChanged(streamID uuid.UUID) {
 	}
 
 	if st.SongID != nil && st.StartedAt != nil {
+		// Clear ETag cache for old song
+		if sh.SongID != uuid.Nil {
+			delete(s.etagCache, sh.SongID)
+		}
 		sh.UpdateState(*st.SongID, st.Revision, st.StartedAt.UnixNano())
 		go s.serveStream(streamID, sh)
 	}
@@ -121,6 +128,7 @@ func (s *Service) serveStream(streamID uuid.UUID, sh *StreamHub) {
 }
 
 // fetchChunk fetches a chunk of audio from Content Service using Range request.
+// Supports ETag caching via If-None-Match.
 func (s *Service) fetchChunk(songID uuid.UUID, offset int64) ([]byte, error) {
 	url := fmt.Sprintf("%s/songs/%s/audio", s.cfg.ContentServiceURL, songID)
 
@@ -132,11 +140,26 @@ func (s *Service) fetchChunk(songID uuid.UUID, offset int64) ([]byte, error) {
 	end := offset + s.cfg.ChunkSize - 1
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", offset, end))
 
+	// Add If-None-Match if we have a cached ETag
+	if etag, ok := s.etagCache[songID]; ok {
+		req.Header.Set("If-None-Match", etag)
+	}
+
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	// Cache ETag for future requests
+	if etag := resp.Header.Get("ETag"); etag != "" {
+		s.etagCache[songID] = etag
+	}
+
+	// 304 Not Modified — no new data
+	if resp.StatusCode == http.StatusNotModified {
+		return nil, nil
+	}
 
 	if resp.StatusCode != http.StatusPartialContent && resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
