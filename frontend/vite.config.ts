@@ -14,9 +14,14 @@ export default defineConfig({
     port: 5173,
     open: 'http://127.0.0.1:5173',
     proxy: {
-      '/api': { target: 'http://localhost:18000', changeOrigin: true },
-      '/dev-docs': { target: 'http://localhost:18000', changeOrigin: true },
-      '/swagger': { target: 'http://localhost:18000', changeOrigin: true },
+      '/api': {
+        target: 'http://127.0.0.1:18000',
+        changeOrigin: true,
+        timeout: 0,
+        proxyTimeout: 0,
+      },
+      '/dev-docs': { target: 'http://127.0.0.1:18000', changeOrigin: true },
+      '/swagger': { target: 'http://127.0.0.1:18000', changeOrigin: true },
     },
   },
 })

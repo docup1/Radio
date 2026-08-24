@@ -9,6 +9,14 @@ import type {
   InitUploadInput,
 } from './types'
 
+const CHUNK_BASE = (() => {
+  if (!import.meta.env.DEV) return ''
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    return `${window.location.protocol}//${window.location.hostname}:18000`
+  }
+  return 'http://127.0.0.1:18000'
+})()
+
 export const content = {
   listSongs: (scope: SongScope = 'mine', limit = 20, offset = 0) =>
     request<Song[]>('GET', `/api/content/songs?scope=${scope}&limit=${limit}&offset=${offset}`),
@@ -32,10 +40,12 @@ export const content = {
     request<UploadSession>('POST', '/api/content/uploads', input),
 
   uploadChunk: (id: string, index: number, body: Blob) =>
-    fetch(`/api/content/uploads/${id}/chunks/${index}`, {
+    fetch(`${CHUNK_BASE}/api/content/uploads/${id}/chunks/${index}`, {
       method: 'PUT',
       body,
       credentials: 'include',
+      // bypass Vite proxy in dev to avoid socket hang up on binary PUT
+      ...(CHUNK_BASE ? { mode: 'cors' as RequestMode } : {}),
     }).then((r) => {
       if (!r.ok) throw new Error('chunk upload failed')
     }),
