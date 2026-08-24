@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package stream;
+
+option go_package = "radio/sender-service/internal/api/grpc/pb;pb";
+
+service StreamService {
+  // GetState returns the current state of a stream (song_id, started_at, etc.)
+  rpc GetState(GetStateRequest) returns (StreamStateResponse);
+
+  // Advance atomically transitions to the next song and returns the new state.
+  rpc Advance(AdvanceRequest) returns (StreamStateResponse);
+}
+
+message GetStateRequest {
+  string stream_id = 1;
+}
+
+message AdvanceRequest {
+  string stream_id = 1;
+}
+
+message StreamStateResponse {
+  string stream_id = 1;
+  string current_queue_id = 2;
+  string song_id = 3;
+  int64 started_at = 4;       // unix timestamp nanos
+  bool is_active = 5;
+  int64 revision = 6;
+}

@@ -175,6 +175,28 @@ services:
       start_period: 10s
     command: ["/usr/local/bin/gateway"]
 
+  sender-service:
+    build: ./sender-service
+    depends_on:
+      redis:
+        condition: service_healthy
+      stream-service:
+        condition: service_started
+    environment:
+      APP_ENV: dev
+      STREAM_SERVICE_GRPC: "stream-service:8082"
+      CONTENT_SERVICE_URL: "http://content-service:8081"
+    volumes:
+      - ./sender-service/config.yaml:/app/config.yaml:ro
+    ports:
+      - "18095:8081"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
 volumes:
   pgdata:
   redisdata:
