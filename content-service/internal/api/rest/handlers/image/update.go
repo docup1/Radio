@@ -8,6 +8,17 @@ import (
 	"radio/content-service/internal/domain/interfaces"
 )
 
+// Update patches an image's mutable fields.
+//
+//	@Summary	Update image
+//	@Tags		images
+//	@Param		X-Owner-ID	header	string	true	"Owner UUID (set by gateway)"
+//	@Param		id			path	string	true	"Image ID"
+//	@Success	204
+//	@Failure	400			{object}	map[string]string
+//	@Failure	404			{object}	map[string]string
+//	@Failure	500			{object}	map[string]string
+//	@Router		/images/{id} [put]
 func Update(svc *application.Services) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := common.OwnerOrError(w, r); !ok {

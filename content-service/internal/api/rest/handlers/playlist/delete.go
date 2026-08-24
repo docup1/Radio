@@ -7,6 +7,17 @@ import (
 	"radio/content-service/internal/application"
 )
 
+// Delete removes a playlist.
+//
+//	@Summary	Delete playlist
+//	@Tags		playlists
+//	@Param		X-Owner-ID	header	string	true	"Owner UUID (set by gateway)"
+//	@Param		id			path	string	true	"Playlist ID"
+//	@Success	204
+//	@Failure	400			{object}	map[string]string
+//	@Failure	404			{object}	map[string]string
+//	@Failure	500			{object}	map[string]string
+//	@Router		/playlists/{id} [delete]
 func Delete(svc *application.Services) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		owner, ok := common.OwnerOrError(w, r)

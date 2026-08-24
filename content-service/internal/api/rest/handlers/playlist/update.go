@@ -4,10 +4,24 @@ import (
 	"net/http"
 
 	"radio/content-service/internal/api/rest/handlers/common"
+	"radio/content-service/internal/api/rest/handlers/dto"
 	"radio/content-service/internal/application"
 	"radio/content-service/internal/domain/interfaces"
 )
 
+// Update patches a playlist's mutable fields.
+//
+//	@Summary	Update playlist
+//	@Tags		playlists
+//	@Accept		json
+//	@Param		X-Owner-ID	header	string						true	"Owner UUID (set by gateway)"
+//	@Param		id			path	string						true	"Playlist ID"
+//	@Param		request		body	dto.UpdatePlaylistRequest	true	"Playlist patch"
+//	@Success	204
+//	@Failure	400			{object}	map[string]string
+//	@Failure	404			{object}	map[string]string
+//	@Failure	500			{object}	map[string]string
+//	@Router		/playlists/{id} [put]
 func Update(svc *application.Services) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		owner, ok := common.OwnerOrError(w, r)
@@ -19,10 +33,7 @@ func Update(svc *application.Services) http.HandlerFunc {
 			common.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		var req struct {
-			Name     *string `json:"name"`
-			IsPublic *bool   `json:"is_public"`
-		}
+		var req dto.UpdatePlaylistRequest
 		if err := common.DecodeJSON(r, &req); err != nil {
 			common.WriteError(w, http.StatusBadRequest, "invalid request body")
 			return

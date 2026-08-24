@@ -11,6 +11,7 @@ import (
 	"radio/content-service/internal/infrastructure"
 	"radio/content-service/internal/infrastructure/db"
 	osfs "radio/content-service/internal/infrastructure/os"
+
 )
 
 func main() {
@@ -53,7 +54,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPPrivate.Addr,
-		Handler:           httptransport.NewHandler(svc, files),
+		Handler:           httptransport.NewHandler(svc, files, conn, cfg.Swagger.Enabled, cfg.Swagger.Path, cfg.Swagger.SpecFile),
 		ReadHeaderTimeout: cfg.HTTPPrivate.ReadHeaderTimeout,
 	}
 	log.Printf("content-service stream listening on %s", cfg.HTTPPrivate.Addr)

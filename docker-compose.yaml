@@ -39,8 +39,10 @@ services:
       user-service-migrations:
         condition: service_completed_successfully
     environment:
+      APP_ENV: dev
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      SWAGGER_ENABLED: "true"
     volumes:
       - ./user-service/config.yaml:/app/config.yaml:ro
     ports:
@@ -70,11 +72,19 @@ services:
         condition: service_completed_successfully
     environment:
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      APP_ENV: dev
+      SWAGGER_ENABLED: "true"
     volumes:
       - content-storage:/data
       - ./content-service/config.yaml:/app/config.yaml:ro
     ports:
       - "18090:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     command: ["/usr/local/bin/public"]
 
   content-service-stream:
@@ -86,11 +96,19 @@ services:
         condition: service_completed_successfully
     environment:
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      APP_ENV: dev
+      SWAGGER_ENABLED: "true"
     volumes:
       - content-storage:/data
       - ./content-service/config.yaml:/app/config.yaml:ro
     ports:
       - "18091:8081"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     command: ["/usr/local/bin/stream"]
 
   content-service-access:

@@ -26,3 +26,8 @@ validation:
 bcrypt:
   cost: 10
   max_concurrent: 4
+
+swagger:
+  enabled: false
+  path: /swagger
+  spec_file: docs/swagger.json

@@ -18,6 +18,16 @@ const selectUserByID = `
 	FROM users
 	WHERE id = $1`
 
+// MeHandler returns the currently authenticated user.
+//
+//	@Summary	Get current user
+//	@Tags		users
+//	@Produce	json
+//	@Param		Authorization	header	string	true	"Bearer JWT"
+//	@Success	200	{object}	meResponse
+//	@Failure	401	{object}	map[string]string
+//	@Failure	500	{object}	map[string]string
+//	@Router		/me [get]
 func MeHandler(db *sql.DB) func(http.ResponseWriter, *http.Request, infra.AuthContext) {
 	return func(w http.ResponseWriter, r *http.Request, actx infra.AuthContext) {
 		var resp meResponse

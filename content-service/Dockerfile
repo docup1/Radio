@@ -4,6 +4,7 @@ RUN mkdir -p /data/chunks /data/media && chown -R app:app /data
 USER app
 WORKDIR /app
 COPY config.yaml ./
+COPY docs/ /app/docs/
 COPY bin/public /usr/local/bin/public
 COPY bin/stream /usr/local/bin/stream
 COPY bin/access /usr/local/bin/access

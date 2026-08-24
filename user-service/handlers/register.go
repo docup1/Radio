@@ -29,6 +29,18 @@ const insertUser = `
 	VALUES ($1, $2, $3)
 	RETURNING id`
 
+// RegisterHandler registers a new user.
+//
+//	@Summary	Register a new user
+//	@Tags		auth
+//	@Accept		json
+//	@Produce	json
+//	@Param		request	body		registerRequest	true	"Registration payload"
+//	@Success	201		{object}	registerResponse
+//	@Failure	400		{object}	map[string]string
+//	@Failure	409		{object}	map[string]string
+//	@Failure	500		{object}	map[string]string
+//	@Router		/register [post]
 func RegisterHandler(db *sql.DB, cfg *infra.Config, hasher *infra.Hasher) http.HandlerFunc {
 	usernamePattern := regexp.MustCompile(fmt.Sprintf(
 		`^[a-zA-Z0-9_]{%d,%d}$`,

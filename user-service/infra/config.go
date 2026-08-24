@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -66,12 +67,24 @@ type BcryptConfig struct {
 	MaxConcurrent int `yaml:"max_concurrent"`
 }
 
+// SwaggerConfig toggles the Swagger UI. It is enabled only in dev (see
+// SWAGGER_ENABLED) and served on Path (default /swagger) of the HTTP server.
+// SpecFile is the path to the generated OpenAPI document (swagger.json /
+// swagger.yaml) produced by `make generate`; it is served from disk, never
+// embedded or hardcoded.
+type SwaggerConfig struct {
+	Enabled  bool   `yaml:"enabled"`
+	Path     string `yaml:"path"`
+	SpecFile string `yaml:"spec_file"`
+}
+
 type Config struct {
 	HTTP       HTTPConfig       `yaml:"http"`
 	DB         DBConfig         `yaml:"db"`
 	Auth       AuthConfig       `yaml:"auth"`
 	Validation ValidationConfig `yaml:"validation"`
 	Bcrypt     BcryptConfig     `yaml:"bcrypt"`
+	Swagger    SwaggerConfig    `yaml:"swagger"`
 
 	JWTSecret  []byte
 	DBPassword string
@@ -88,6 +101,13 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("parse config %s: %w", path, err)
 	}
 
+	if cfg.Swagger.Path == "" {
+		cfg.Swagger.Path = "/swagger"
+	}
+	if cfg.Swagger.SpecFile == "" {
+		cfg.Swagger.SpecFile = "docs/swagger.json"
+	}
+
 	cfg.JWTSecret = []byte(os.Getenv("JWT_SECRET"))
 	if len(cfg.JWTSecret) == 0 {
 		return nil, ErrMissingJWTSecret
@@ -95,6 +115,15 @@ func LoadConfig(path string) (*Config, error) {
 	cfg.DBPassword = os.Getenv("DB_PASSWORD")
 	if cfg.DBPassword == "" {
 		return nil, ErrMissingDBPassword
+	}
+	if v := os.Getenv("SWAGGER_ENABLED"); v != "" {
+		cfg.Swagger.Enabled = strings.EqualFold(v, "true") || v == "1"
+	}
+	if v := os.Getenv("SWAGGER_PATH"); v != "" {
+		cfg.Swagger.Path = v
+	}
+	if v := os.Getenv("SWAGGER_SPEC_FILE"); v != "" {
+		cfg.Swagger.SpecFile = v
 	}
 	return &cfg, nil
 }

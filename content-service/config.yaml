@@ -1,3 +1,8 @@
+# Runtime environment: dev | prod. Can be overridden with APP_ENV.
+env: dev
+# Log level: debug | info | warn | error. Can be overridden with LOG_LEVEL.
+log_level: info
+
 http_public:
   addr: ":8080"
   read_header_timeout: 5s
@@ -7,7 +12,12 @@ http_private:
   read_header_timeout: 5s
 
 grpc:
-  addr: ":8082"
+  addr: ":8082"  # placeholder
+
+swagger:
+  # Served on the HTTP servers when enabled. Turn on in dev only.
+  enabled: false
+  path: /swagger
 
 storage:
   chunk_dir: "/data/chunks"

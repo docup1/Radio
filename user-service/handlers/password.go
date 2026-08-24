@@ -25,6 +25,18 @@ const updateUserPassword = `
 	SET password = $1
 	WHERE id = $2`
 
+// PasswordHandler changes the authenticated user's password.
+//
+//	@Summary	Change password
+//	@Tags		users
+//	@Accept		json
+//	@Param		Authorization	header	string			true	"Bearer JWT"
+//	@Param		request			body		passwordRequest	true	"Password change payload"
+//	@Success	204
+//	@Failure	400	{object}	map[string]string
+//	@Failure	401	{object}	map[string]string
+//	@Failure	500	{object}	map[string]string
+//	@Router		/password [put]
 func PasswordHandler(db *sql.DB, cfg *infra.Config, hasher *infra.Hasher) func(http.ResponseWriter, *http.Request, infra.AuthContext) {
 	return func(w http.ResponseWriter, r *http.Request, actx infra.AuthContext) {
 		var req passwordRequest

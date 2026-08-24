@@ -9,6 +9,8 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	httpSwagger "github.com/swaggo/http-swagger"
+
 	"radio/user-service/handlers"
 	"radio/user-service/infra"
 	"radio/user-service/jobs"
@@ -45,6 +47,17 @@ func main() {
 	mux.Handle("GET /me", infra.RequireAuth(db, cfg, handlers.MeHandler(db)))
 	mux.Handle("POST /logout", infra.RequireAuth(db, cfg, handlers.LogoutHandler(db)))
 	mux.Handle("PUT /password", infra.RequireAuth(db, cfg, handlers.PasswordHandler(db, cfg, hasher)))
+
+	if cfg.Swagger.Enabled {
+		specURL := cfg.Swagger.Path + "/swagger.json"
+		mux.HandleFunc("GET "+specURL, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			http.ServeFile(w, r, cfg.Swagger.SpecFile)
+		})
+		mux.Handle(cfg.Swagger.Path+"/", httpSwagger.Handler(func(c *httpSwagger.Config) {
+			c.URL = specURL
+		}))
+	}
 
 	stopSessionCleaner := jobs.StartSessionCleaner(db, cfg.Auth.CleanupInterval)
 	defer stopSessionCleaner()

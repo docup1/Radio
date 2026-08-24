@@ -17,7 +17,7 @@ type Song struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
 	MelodyID    uuid.UUID      `json:"melody_id"`
-	ImageID     uuid.NullUUID  `json:"image_id"`
+	ImageID     uuid.NullUUID  `json:"image_id" swaggerignore:"true"`
 	IsPublic    bool           `json:"is_public"`
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`

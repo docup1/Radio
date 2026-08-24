@@ -31,6 +31,18 @@ const insertSession = `
 	INSERT INTO sessions (jti, user_id, expires_at)
 	VALUES ($1, $2, $3)`
 
+// LoginHandler authenticates a user and issues a session JWT.
+//
+//	@Summary	Login
+//	@Tags		auth
+//	@Accept		json
+//	@Produce	json
+//	@Param		request	body		loginRequest	true	"Login payload"
+//	@Success	200		{object}	loginResponse
+//	@Failure	400		{object}	map[string]string
+//	@Failure	401		{object}	map[string]string
+//	@Failure	500		{object}	map[string]string
+//	@Router		/login [post]
 func LoginHandler(db *sql.DB, cfg *infra.Config, hasher *infra.Hasher) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req loginRequest

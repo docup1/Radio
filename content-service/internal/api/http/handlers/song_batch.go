@@ -12,6 +12,17 @@ import (
 // SongAudio streams the audio (melody) of a specific song to the caller in
 // HTTP byte-range batches. Access is enforced via the user_id query parameter:
 // the song must be public or owned by that user.
+//
+//	@Summary	Stream song audio
+//	@Tags		songs
+//	@Produce	audio/mpeg
+//	@Param		id			path	string	true	"Song ID"
+//	@Param		user_id		query	string	true	"Requesting user UUID (must own the song or song must be public)"
+//	@Success	200
+//	@Failure	400			{object}	map[string]string
+//	@Failure	404			{object}	map[string]string
+//	@Failure	500			{object}	map[string]string
+//	@Router		/songs/{id}/audio [get]
 func SongAudio(svc *application.Services, files interfaces.FileOpener) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		songID, err := parseID(r, "id")

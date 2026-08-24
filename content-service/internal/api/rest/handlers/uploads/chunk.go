@@ -9,6 +9,20 @@ import (
 	"radio/content-service/internal/application"
 )
 
+// Chunk uploads a single binary chunk of an upload session.
+//
+//	@Summary	Upload chunk
+//	@Tags		uploads
+//	@Accept		application/octet-stream
+//	@Param		X-Owner-ID	header	string	true	"Owner UUID (set by gateway)"
+//	@Param		id			path	string	true	"Upload session ID"
+//	@Param		index		path	int		true	"Chunk index"
+//	@Param		chunk		body	string	true	"Raw chunk bytes"
+//	@Success	204
+//	@Failure	400			{object}	map[string]string
+//	@Failure	404			{object}	map[string]string
+//	@Failure	500			{object}	map[string]string
+//	@Router		/uploads/{id}/chunks/{index} [put]
 func Chunk(svc *application.Services) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		owner, ok := common.OwnerOrError(w, r)

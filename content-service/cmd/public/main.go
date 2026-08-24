@@ -11,6 +11,7 @@ import (
 	"radio/content-service/internal/infrastructure"
 	"radio/content-service/internal/infrastructure/db"
 	osfs "radio/content-service/internal/infrastructure/os"
+
 )
 
 func main() {
@@ -52,7 +53,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPPublic.Addr,
-		Handler:           apirest.NewHandler(svc),
+		Handler:           apirest.NewHandler(svc, conn, cfg.Swagger.Enabled, cfg.Swagger.Path, cfg.Swagger.SpecFile),
 		ReadHeaderTimeout: cfg.HTTPPublic.ReadHeaderTimeout,
 	}
 	log.Printf("content-service public listening on %s", cfg.HTTPPublic.Addr)

@@ -1,8 +1,12 @@
 package rest
 
 import (
+	"database/sql"
 	"net/http"
 
+	httpSwagger "github.com/swaggo/http-swagger"
+
+	health "radio/content-service/internal/api/health"
 	hsong "radio/content-service/internal/api/rest/handlers/song"
 	hmelody "radio/content-service/internal/api/rest/handlers/melody"
 	himage "radio/content-service/internal/api/rest/handlers/image"
@@ -12,9 +16,24 @@ import (
 )
 
 // NewHandler builds the public user-facing REST API. Every request carries the
-// owner identity in the X-Owner-ID header (set by the gateway).
-func NewHandler(svc *application.Services) http.Handler {
+// owner identity in the X-Owner-ID header (set by the gateway). When
+// swaggerEnabled is true the Swagger UI is served under swaggerPath and its
+// OpenAPI document is served from disk (swaggerSpec), never embedded.
+func NewHandler(svc *application.Services, db *sql.DB, swaggerEnabled bool, swaggerPath, swaggerSpec string) http.Handler {
 	mux := http.NewServeMux()
+
+	if swaggerEnabled {
+		specURL := swaggerPath + "/swagger.json"
+		mux.HandleFunc("GET "+specURL, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			http.ServeFile(w, r, swaggerSpec)
+		})
+		mux.Handle(swaggerPath+"/", httpSwagger.Handler(func(c *httpSwagger.Config) {
+			c.URL = specURL
+		}))
+	}
+
+	mux.HandleFunc("GET /healthz", health.Check(db))
 
 	mux.HandleFunc("POST /songs", hsong.Create(svc))
 	mux.HandleFunc("GET /songs", hsong.List(svc))

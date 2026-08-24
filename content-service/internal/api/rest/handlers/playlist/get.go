@@ -7,6 +7,18 @@ import (
 	"radio/content-service/internal/application"
 )
 
+// Get returns a single playlist by ID.
+//
+//	@Summary	Get playlist
+//	@Tags		playlists
+//	@Produce	json
+//	@Param		X-Owner-ID	header	string	true	"Owner UUID (set by gateway)"
+//	@Param		id			path	string	true	"Playlist ID"
+//	@Success	200			{object}	models.Playlist
+//	@Failure	400			{object}	map[string]string
+//	@Failure	404			{object}	map[string]string
+//	@Failure	500			{object}	map[string]string
+//	@Router		/playlists/{id} [get]
 func Get(svc *application.Services) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		owner, ok := common.OwnerOrError(w, r)
