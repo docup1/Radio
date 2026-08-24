@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useSongs } from '@/features/content/composables/useSongs'
 import { usePlayer } from '@/features/content/composables/usePlayer'
 import { imageURL } from '@/shared/api/content'
 
-const { songs, scope, query, loading, hasMore, load, setScope, setQuery } = useSongs()
+const { songs, scope, loading, hasMore, load, setScope, setQuery } = useSongs()
 const { playSong } = usePlayer()
+const localQuery = ref('')
+let debounce: ReturnType<typeof setTimeout> | null = null
 
 onMounted(() => load(true))
 
@@ -19,6 +21,13 @@ function onScroll(e: Event) {
 function play(index: number) {
   playSong(songs.value[index], songs.value)
 }
+
+function onSearchInput(e: Event) {
+  const v = (e.target as HTMLInputElement).value
+  localQuery.value = v
+  if (debounce) clearTimeout(debounce)
+  debounce = setTimeout(() => setQuery(v), 300)
+}
 </script>
 
 <template>
@@ -31,10 +40,10 @@ function play(index: number) {
         </button>
       </div>
       <input
-        v-model="query"
+        :value="localQuery"
         class="search"
         placeholder="Поиск…"
-        @input="setQuery(query)"
+        @input="onSearchInput"
       />
       <RouterLink to="/content/songs/new" class="add">+ Песня</RouterLink>
     </div>

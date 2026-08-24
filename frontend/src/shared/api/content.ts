@@ -46,6 +46,11 @@ export const content = {
   listPlaylists: (limit = 50, offset = 0) =>
     request<Playlist[]>('GET', `/api/content/playlists?limit=${limit}&offset=${offset}`),
 
+  getPlaylist: (id: string) => request<Playlist>('GET', `/api/content/playlists/${id}`),
+
+  updatePlaylist: (id: string, patch: { name: string }) =>
+    request<Playlist>('PUT', `/api/content/playlists/${id}`, patch),
+
   createPlaylist: (name: string) =>
     request<Playlist>('POST', '/api/content/playlists', { name }),
 
