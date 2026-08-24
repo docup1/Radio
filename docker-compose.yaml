@@ -111,6 +111,30 @@ services:
       retries: 3
       start_period: 10s
 
+  stream-service:
+    build: ./stream-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      stream-service-migrations:
+        condition: service_completed_successfully
+    environment:
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      APP_ENV: dev
+      SWAGGER_ENABLED: "true"
+    volumes:
+      - ./stream-service/config.yaml:/app/config.yaml:ro
+    ports:
+      - "18093:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   gateway:
     build: ./gateway
     depends_on:
@@ -120,9 +144,13 @@ services:
         condition: service_completed_successfully
       content-service-migrations:
         condition: service_completed_successfully
+      stream-service-migrations:
+        condition: service_completed_successfully
       user-service:
         condition: service_started
       content-service:
+        condition: service_started
+      stream-service:
         condition: service_started
     environment:
       APP_ENV: dev
@@ -131,6 +159,7 @@ services:
       USER_SERVICE_URL: "http://user-service:8080"
       CONTENT_SERVICE_URL: "http://content-service:8080"
       CONTENT_STREAM_URL: "http://content-service:8081"
+      STREAM_SERVICE_URL: "http://stream-service:8080"
       COOKIE_NAME: "access_token"
       COOKIE_MAX_AGE: "86400"
       COOKIE_SECURE_IN_PROD: "true"
