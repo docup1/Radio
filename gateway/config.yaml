@@ -6,6 +6,7 @@ upstreams:
   user_service: "http://user-service:8080"
   content_service: "http://content-service:8080"
   content_stream: "http://content-service:8081"
+  stream_service: "http://stream-service:8080"
 cookie:
   name: "access_token"
   path: "/"

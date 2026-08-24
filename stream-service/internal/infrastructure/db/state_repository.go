@@ -92,3 +92,25 @@ func (r *StreamStateRepository) SetActive(ctx context.Context, streamID uuid.UUI
 	}
 	return &st, nil
 }
+
+// ListActive returns all streams that are currently active (is_active = true).
+func (r *StreamStateRepository) ListActive(ctx context.Context) ([]*models.StreamState, error) {
+	rows, err := r.DB.QueryContext(ctx,
+		`SELECT stream_id, current_queue_id, started_at, is_active, revision, updated_at
+		 FROM stream_state WHERE is_active = true`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var states []*models.StreamState
+	for rows.Next() {
+		var st models.StreamState
+		if err := rows.Scan(&st.StreamID, &st.CurrentQueueID, &st.StartedAt, &st.IsActive, &st.Revision, &st.UpdatedAt); err != nil {
+			return nil, err
+		}
+		states = append(states, &st)
+	}
+	return states, rows.Err()
+}

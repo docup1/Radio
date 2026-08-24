@@ -22,6 +22,7 @@ type StreamStateRepository interface {
 	Update(ctx context.Context, state *models.StreamState) error
 	Advance(ctx context.Context, streamID uuid.UUID, nextQueueID *uuid.UUID, startedAt time.Time) (*models.StreamState, error)
 	SetActive(ctx context.Context, streamID uuid.UUID, active bool) (*models.StreamState, error)
+	ListActive(ctx context.Context) ([]*models.StreamState, error)
 }
 
 type QueueRepository interface {

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"radio/gateway/api/content"
+	"radio/gateway/api/stream"
 	"radio/gateway/api/user"
 	"radio/gateway/infra"
 )
@@ -38,6 +39,12 @@ func NewRouter(cfg *infra.Config) http.Handler {
 
 	user.Register(mux, user.New(userProxy, authSvc))
 	content.Register(mux, content.New(restProxy, streamProxy, authSvc))
+
+	if cfg.Upstreams.StreamService != "" {
+		streamProxy := infra.NewProxy(cfg.Upstreams.StreamService, "/api/streams")
+		stream.Register(mux, stream.New(streamProxy, authSvc))
+	}
+
 	infra.Mount(mux, cfg)
 
 	if cfg.StaticDir != "" {

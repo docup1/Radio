@@ -142,8 +142,21 @@ func (w *Worker) watchdog(ctx context.Context) {
 }
 
 func (w *Worker) checkWatchdog(ctx context.Context, maxDuration time.Duration) {
-	// For now, iterate active streams and check started_at
-	// TODO: optimize with a dedicated query
-	log.Printf("[worker] watchdog tick")
-	// This will be implemented when we have a way to list active streams
+	states, err := w.svc.repos.State.ListActive(ctx)
+	if err != nil {
+		log.Printf("[worker] watchdog list active: %v", err)
+		return
+	}
+
+	for _, st := range states {
+		if st.StartedAt == nil {
+			continue
+		}
+		if time.Since(*st.StartedAt) > maxDuration {
+			log.Printf("[worker] watchdog auto-advance stream %s (started_at=%s)", st.StreamID, st.StartedAt)
+			if _, err := w.svc.AdvanceSong(ctx, st.StreamID); err != nil {
+				log.Printf("[worker] watchdog advance %s: %v", st.StreamID, err)
+			}
+		}
+	}
 }
