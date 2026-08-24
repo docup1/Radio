@@ -5,6 +5,9 @@ http:
   addr: ":8080"
   read_header_timeout: 5s
 
+grpc:
+  addr: ":8082"
+
 db:
   host: postgres
   port: 5432

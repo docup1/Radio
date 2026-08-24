@@ -19,6 +19,10 @@ type HTTPConfig struct {
 	ReadHeaderTimeout time.Duration `yaml:"read_header_timeout"`
 }
 
+type GRPCConfig struct {
+	Addr string `yaml:"addr"`
+}
+
 type DBConfig struct {
 	Host            string        `yaml:"host"`
 	Port            int           `yaml:"port"`
@@ -61,6 +65,7 @@ type Config struct {
 	Env      string     `yaml:"env"`
 	LogLevel string     `yaml:"log_level"`
 	HTTP     HTTPConfig `yaml:"http"`
+	GRPC     GRPCConfig `yaml:"grpc"`
 	DB       DBConfig   `yaml:"db"`
 	Redis    RedisConfig `yaml:"redis"`
 	Worker   WorkerConfig `yaml:"worker"`
@@ -130,6 +135,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if v := os.Getenv("HTTP_ADDR"); v != "" {
 		cfg.HTTP.Addr = v
+	}
+	if v := os.Getenv("GRPC_ADDR"); v != "" {
+		cfg.GRPC.Addr = v
 	}
 	if v := os.Getenv("REDIS_ADDR"); v != "" {
 		cfg.Redis.Addr = v

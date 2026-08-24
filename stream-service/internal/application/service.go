@@ -189,6 +189,10 @@ func (s *Service) GetState(ctx context.Context, streamID uuid.UUID) (*models.Str
 	return s.repos.State.GetByStreamID(ctx, streamID)
 }
 
+func (s *Service) GetQueueItem(ctx context.Context, itemID uuid.UUID) (*models.StreamQueueItem, error) {
+	return s.repos.Queue.GetByID(ctx, itemID)
+}
+
 // --- Hashtags ---
 
 func (s *Service) AddHashtag(ctx context.Context, streamID uuid.UUID, name string) (*models.Hashtag, error) {

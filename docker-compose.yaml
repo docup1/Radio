@@ -128,6 +128,7 @@ services:
       - ./stream-service/config.yaml:/app/config.yaml:ro
     ports:
       - "18093:8080"
+      - "18094:8082"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
       interval: 30s
