@@ -51,8 +51,7 @@ function onDelete() {
 
 <template>
   <Card wide>
-    <template #content>
-      <h1>Profile</h1>
+    <h1>Profile</h1>
       <ProfileInfo v-if="user" :username="user.username" />
 
       <section>
@@ -74,6 +73,5 @@ function onDelete() {
       </div>
 
       <ConfirmDialog />
-    </template>
   </Card>
 </template>

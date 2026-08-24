@@ -36,8 +36,7 @@ async function onSubmit() {
 
 <template>
   <Card>
-    <template #content>
-      <h1>{{ mode === 'login' ? 'Login' : 'Register' }}</h1>
+    <h1>{{ mode === 'login' ? 'Login' : 'Register' }}</h1>
       <FormField
         :submit-label="mode === 'login' ? 'Login' : 'Register'"
         :loading="loading"
@@ -56,6 +55,5 @@ async function onSubmit() {
         <template v-if="mode === 'login'">No account? <RouterLink to="/register">Register</RouterLink></template>
         <template v-else>Have an account? <RouterLink to="/login">Login</RouterLink></template>
       </p>
-    </template>
   </Card>
 </template>
