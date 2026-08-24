@@ -23,12 +23,6 @@ databaseChangeLog:
                   constraints:
                     nullable: true
               - column:
-                  name: is_active
-                  type: boolean
-                  defaultValueBoolean: false
-                  constraints:
-                    nullable: false
-              - column:
                   name: loop
                   type: boolean
                   defaultValueBoolean: false
@@ -87,14 +81,6 @@ databaseChangeLog:
                   defaultValueComputed: now()
                   constraints:
                     nullable: false
-      rollback:
-        - dropTable:
-            tableName: stream_queue
-
-  - changeSet:
-      id: 003-create-stream-queue-indexes
-      author: radio
-      changes:
         - createIndex:
             indexName: idx_stream_queue_stream_id
             tableName: stream_queue
@@ -111,12 +97,59 @@ databaseChangeLog:
               - column:
                   name: position
       rollback:
-        - dropIndex:
-            indexName: uq_stream_queue_stream_position
+        - dropTable:
             tableName: stream_queue
-        - dropIndex:
-            indexName: idx_stream_queue_stream_id
-            tableName: stream_queue
+
+  - changeSet:
+      id: 003-create-stream-state-table
+      author: radio
+      changes:
+        - createTable:
+            tableName: stream_state
+            columns:
+              - column:
+                  name: stream_id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+                    foreignKeyName: fk_stream_state_stream_id
+                    references: streams(id)
+                    deleteCascade: true
+              - column:
+                  name: current_queue_id
+                  type: uuid
+                  constraints:
+                    nullable: true
+                    foreignKeyName: fk_stream_state_current_queue_id
+                    references: stream_queue(id)
+                    deleteSetNull: true
+              - column:
+                  name: started_at
+                  type: timestamptz
+                  constraints:
+                    nullable: true
+              - column:
+                  name: is_active
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column:
+                  name: revision
+                  type: bigint
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+      rollback:
+        - dropTable:
+            tableName: stream_state
 
   - changeSet:
       id: 004-create-hashtags-table
@@ -150,14 +183,6 @@ databaseChangeLog:
                   defaultValueComputed: now()
                   constraints:
                     nullable: false
-      rollback:
-        - dropTable:
-            tableName: hashtags
-
-  - changeSet:
-      id: 005-create-hashtags-indexes
-      author: radio
-      changes:
         - createIndex:
             indexName: idx_hashtags_stream_id
             tableName: hashtags
@@ -174,78 +199,11 @@ databaseChangeLog:
               - column:
                   name: name
       rollback:
-        - dropIndex:
-            indexName: uq_hashtags_stream_name
-            tableName: hashtags
-        - dropIndex:
-            indexName: idx_hashtags_stream_id
-            tableName: hashtags
-
-  - changeSet:
-      id: 006-add-streams-revision
-      author: radio
-      changes:
-        - addColumn:
-            tableName: streams
-            columns:
-              - column:
-                  name: revision
-                  type: bigint
-                  defaultValueNumeric: 0
-                  constraints:
-                    nullable: false
-      rollback:
-        - dropColumn:
-            tableName: streams
-            columnName: revision
-
-  - changeSet:
-      id: 007-create-stream-state-table
-      author: radio
-      changes:
-        - createTable:
-            tableName: stream_state
-            columns:
-              - column:
-                  name: stream_id
-                  type: uuid
-                  constraints:
-                    primaryKey: true
-                    nullable: false
-                    foreignKeyName: fk_stream_state_stream_id
-                    references: streams(id)
-                    deleteCascade: true
-              - column:
-                  name: current_queue_id
-                  type: uuid
-                  constraints:
-                    nullable: true
-                    foreignKeyName: fk_stream_state_current_queue_id
-                    references: stream_queue(id)
-                    deleteSetNull: true
-              - column:
-                  name: started_at
-                  type: timestamptz
-                  constraints:
-                    nullable: true
-              - column:
-                  name: revision
-                  type: bigint
-                  defaultValueNumeric: 0
-                  constraints:
-                    nullable: false
-              - column:
-                  name: updated_at
-                  type: timestamptz
-                  defaultValueComputed: now()
-                  constraints:
-                    nullable: false
-      rollback:
         - dropTable:
-            tableName: stream_state
+            tableName: hashtags
 
   - changeSet:
-      id: 008-create-outbox-table
+      id: 005-create-outbox-table
       author: radio
       changes:
         - createTable:
@@ -305,7 +263,7 @@ databaseChangeLog:
             tableName: outbox
 
   - changeSet:
-      id: 009-fix-stream-state-fk-set-null
+      id: 006-fix-stream-state-fk-set-null
       author: radio
       changes:
         - dropForeignKeyConstraint:
