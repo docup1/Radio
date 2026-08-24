@@ -1,0 +1,182 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-create-streams-table
+      author: radio
+      changes:
+        - createTable:
+            tableName: streams
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: name
+                  type: varchar(128)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: description
+                  type: text
+                  constraints:
+                    nullable: true
+              - column:
+                  name: is_active
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column:
+                  name: loop
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+      rollback:
+        - dropTable:
+            tableName: streams
+
+  - changeSet:
+      id: 002-create-stream-queue-table
+      author: radio
+      changes:
+        - createTable:
+            tableName: stream_queue
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: stream_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_stream_queue_stream_id
+                    references: streams(id)
+                    deleteCascade: true
+              - column:
+                  name: song_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: position
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+      rollback:
+        - dropTable:
+            tableName: stream_queue
+
+  - changeSet:
+      id: 003-create-stream-queue-indexes
+      author: radio
+      changes:
+        - createIndex:
+            indexName: idx_stream_queue_stream_id
+            tableName: stream_queue
+            columns:
+              - column:
+                  name: stream_id
+        - createIndex:
+            indexName: uq_stream_queue_stream_position
+            tableName: stream_queue
+            unique: true
+            columns:
+              - column:
+                  name: stream_id
+              - column:
+                  name: position
+      rollback:
+        - dropIndex:
+            indexName: uq_stream_queue_stream_position
+            tableName: stream_queue
+        - dropIndex:
+            indexName: idx_stream_queue_stream_id
+            tableName: stream_queue
+
+  - changeSet:
+      id: 004-create-hashtags-table
+      author: radio
+      changes:
+        - createTable:
+            tableName: hashtags
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: stream_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_hashtags_stream_id
+                    references: streams(id)
+                    deleteCascade: true
+              - column:
+                  name: name
+                  type: varchar(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+      rollback:
+        - dropTable:
+            tableName: hashtags
+
+  - changeSet:
+      id: 005-create-hashtags-indexes
+      author: radio
+      changes:
+        - createIndex:
+            indexName: idx_hashtags_stream_id
+            tableName: hashtags
+            columns:
+              - column:
+                  name: stream_id
+        - createIndex:
+            indexName: uq_hashtags_stream_name
+            tableName: hashtags
+            unique: true
+            columns:
+              - column:
+                  name: stream_id
+              - column:
+                  name: name
+      rollback:
+        - dropIndex:
+            indexName: uq_hashtags_stream_name
+            tableName: hashtags
+        - dropIndex:
+            indexName: idx_hashtags_stream_id
+            tableName: hashtags

@@ -61,6 +61,21 @@ services:
       --password=${DB_PASSWORD:?DB_PASSWORD is required}
       update
 
+  stream-service-migrations:
+    image: liquibase/liquibase:4.33.0-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./stream-service/migrations:/migrations:ro
+    command: >-
+      --search-path=/migrations
+      --changelog-file=changelog.yaml
+      --url=jdbc:postgresql://postgres:5432/radio_streams
+      --username=radio
+      --password=${DB_PASSWORD:?DB_PASSWORD is required}
+      update
+
   content-service:
     build: ./content-service
     depends_on:

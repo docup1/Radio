@@ -1,3 +1,5 @@
 CREATE DATABASE radio_users;
 
 CREATE DATABASE radio_content;
+
+CREATE DATABASE radio_streams;
