@@ -47,6 +47,7 @@ func main() {
 	mux.Handle("GET /me", infra.RequireAuth(db, cfg, handlers.MeHandler(db)))
 	mux.Handle("POST /logout", infra.RequireAuth(db, cfg, handlers.LogoutHandler(db)))
 	mux.Handle("PUT /password", infra.RequireAuth(db, cfg, handlers.PasswordHandler(db, cfg, hasher)))
+	mux.Handle("DELETE /me", infra.RequireAuth(db, cfg, handlers.DeleteMeHandler(db)))
 
 	if cfg.Swagger.Enabled {
 		specURL := cfg.Swagger.Path + "/swagger.json"

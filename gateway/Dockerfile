@@ -16,5 +16,9 @@ WORKDIR /app
 COPY --from=build /out/gateway /usr/local/bin/gateway
 COPY config.yaml ./
 COPY --from=build /src/docs /app/docs
+# Built frontend (produced by `make prod` via `make frontend-dist`). In dev this
+# directory is empty and STATIC_DIR is not set, so the gateway only proxies the API.
+COPY dist /app/dist
+ENV STATIC_DIR=/app/dist
 EXPOSE 8080
 CMD ["/usr/local/bin/gateway"]

@@ -77,6 +77,19 @@ paths:
       tags:
       - auth
   /api/auth/me:
+    delete:
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/user.ErrorResponse'
+      security:
+      - bearerAuth: []
+      summary: Delete account
+      tags:
+      - auth
     get:
       produces:
       - application/json

@@ -20,7 +20,7 @@ generate:
 # Build the single Linux binary (used by the Docker image). Always regenerates
 # the Swagger docs first so they never drift from the endpoints.
 build: generate
-	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -ldflags="-s -w" -o $(BINDIR)/content-service ./cmd/content-service
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -ldflags="-s -w" -o $(BINDIR)/content-service ./cmd/content
 
 # Rebuild and (re)start the content-service container with Swagger enabled.
 docker-build: build

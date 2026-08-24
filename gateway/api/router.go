@@ -40,5 +40,9 @@ func NewRouter(cfg *infra.Config) http.Handler {
 	content.Register(mux, content.New(restProxy, streamProxy, authSvc))
 	infra.Mount(mux, cfg)
 
+	if cfg.StaticDir != "" {
+		mux.Handle("/", infra.StaticHandler(cfg.StaticDir))
+	}
+
 	return infra.Middleware(cfg, mux)
 }

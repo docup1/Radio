@@ -21,6 +21,7 @@ type Config struct {
 	Cookie    CookieConfig
 	CORS      CORSConfig
 	Swagger   SwaggerConfig
+	StaticDir string
 }
 
 type ServerConfig struct {
@@ -134,6 +135,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if v := os.Getenv("SWAGGER_SPEC_FILE"); v != "" {
 		cfg.Swagger.SpecFile = v
+	}
+	if v := os.Getenv("STATIC_DIR"); v != "" {
+		cfg.StaticDir = v
 	}
 
 	if cfg.Upstreams.UserService == "" {
