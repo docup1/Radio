@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package stream;
 
-option go_package = "radio/sender-service/internal/api/grpc/pb;pb";
+option go_package = "radio/sender-service/internal/infrastructure/grpc/pb;pb";
 
 service StreamService {
   // GetState returns the current state of a stream (song_id, started_at, etc.)

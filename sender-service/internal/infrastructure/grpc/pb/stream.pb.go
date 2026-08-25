@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v7.34.1
-// source: internal/api/grpc/pb/stream.proto
+// source: internal/infrastructure/grpc/pb/stream.proto
 
 package pb
 
@@ -30,7 +30,7 @@ type GetStateRequest struct {
 
 func (x *GetStateRequest) Reset() {
 	*x = GetStateRequest{}
-	mi := &file_internal_api_grpc_pb_stream_proto_msgTypes[0]
+	mi := &file_internal_infrastructure_grpc_pb_stream_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -42,7 +42,7 @@ func (x *GetStateRequest) String() string {
 func (*GetStateRequest) ProtoMessage() {}
 
 func (x *GetStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_api_grpc_pb_stream_proto_msgTypes[0]
+	mi := &file_internal_infrastructure_grpc_pb_stream_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -55,7 +55,7 @@ func (x *GetStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStateRequest.ProtoReflect.Descriptor instead.
 func (*GetStateRequest) Descriptor() ([]byte, []int) {
-	return file_internal_api_grpc_pb_stream_proto_rawDescGZIP(), []int{0}
+	return file_internal_infrastructure_grpc_pb_stream_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *GetStateRequest) GetStreamId() string {
@@ -74,7 +74,7 @@ type AdvanceRequest struct {
 
 func (x *AdvanceRequest) Reset() {
 	*x = AdvanceRequest{}
-	mi := &file_internal_api_grpc_pb_stream_proto_msgTypes[1]
+	mi := &file_internal_infrastructure_grpc_pb_stream_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -86,7 +86,7 @@ func (x *AdvanceRequest) String() string {
 func (*AdvanceRequest) ProtoMessage() {}
 
 func (x *AdvanceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_api_grpc_pb_stream_proto_msgTypes[1]
+	mi := &file_internal_infrastructure_grpc_pb_stream_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -99,7 +99,7 @@ func (x *AdvanceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdvanceRequest.ProtoReflect.Descriptor instead.
 func (*AdvanceRequest) Descriptor() ([]byte, []int) {
-	return file_internal_api_grpc_pb_stream_proto_rawDescGZIP(), []int{1}
+	return file_internal_infrastructure_grpc_pb_stream_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *AdvanceRequest) GetStreamId() string {
@@ -123,7 +123,7 @@ type StreamStateResponse struct {
 
 func (x *StreamStateResponse) Reset() {
 	*x = StreamStateResponse{}
-	mi := &file_internal_api_grpc_pb_stream_proto_msgTypes[2]
+	mi := &file_internal_infrastructure_grpc_pb_stream_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -135,7 +135,7 @@ func (x *StreamStateResponse) String() string {
 func (*StreamStateResponse) ProtoMessage() {}
 
 func (x *StreamStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_api_grpc_pb_stream_proto_msgTypes[2]
+	mi := &file_internal_infrastructure_grpc_pb_stream_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -148,7 +148,7 @@ func (x *StreamStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamStateResponse.ProtoReflect.Descriptor instead.
 func (*StreamStateResponse) Descriptor() ([]byte, []int) {
-	return file_internal_api_grpc_pb_stream_proto_rawDescGZIP(), []int{2}
+	return file_internal_infrastructure_grpc_pb_stream_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *StreamStateResponse) GetStreamId() string {
@@ -193,11 +193,11 @@ func (x *StreamStateResponse) GetRevision() int64 {
 	return 0
 }
 
-var File_internal_api_grpc_pb_stream_proto protoreflect.FileDescriptor
+var File_internal_infrastructure_grpc_pb_stream_proto protoreflect.FileDescriptor
 
-const file_internal_api_grpc_pb_stream_proto_rawDesc = "" +
+const file_internal_infrastructure_grpc_pb_stream_proto_rawDesc = "" +
 	"\n" +
-	"!internal/api/grpc/pb/stream.proto\x12\x06stream\".\n" +
+	",internal/infrastructure/grpc/pb/stream.proto\x12\x06stream\".\n" +
 	"\x0fGetStateRequest\x12\x1b\n" +
 	"\tstream_id\x18\x01 \x01(\tR\bstreamId\"-\n" +
 	"\x0eAdvanceRequest\x12\x1b\n" +
@@ -212,27 +212,27 @@ const file_internal_api_grpc_pb_stream_proto_rawDesc = "" +
 	"\brevision\x18\x06 \x01(\x03R\brevision2\x91\x01\n" +
 	"\rStreamService\x12@\n" +
 	"\bGetState\x12\x17.stream.GetStateRequest\x1a\x1b.stream.StreamStateResponse\x12>\n" +
-	"\aAdvance\x12\x16.stream.AdvanceRequest\x1a\x1b.stream.StreamStateResponseB.Z,radio/sender-service/internal/api/grpc/pb;pbb\x06proto3"
+	"\aAdvance\x12\x16.stream.AdvanceRequest\x1a\x1b.stream.StreamStateResponseB9Z7radio/sender-service/internal/infrastructure/grpc/pb;pbb\x06proto3"
 
 var (
-	file_internal_api_grpc_pb_stream_proto_rawDescOnce sync.Once
-	file_internal_api_grpc_pb_stream_proto_rawDescData []byte
+	file_internal_infrastructure_grpc_pb_stream_proto_rawDescOnce sync.Once
+	file_internal_infrastructure_grpc_pb_stream_proto_rawDescData []byte
 )
 
-func file_internal_api_grpc_pb_stream_proto_rawDescGZIP() []byte {
-	file_internal_api_grpc_pb_stream_proto_rawDescOnce.Do(func() {
-		file_internal_api_grpc_pb_stream_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_internal_api_grpc_pb_stream_proto_rawDesc), len(file_internal_api_grpc_pb_stream_proto_rawDesc)))
+func file_internal_infrastructure_grpc_pb_stream_proto_rawDescGZIP() []byte {
+	file_internal_infrastructure_grpc_pb_stream_proto_rawDescOnce.Do(func() {
+		file_internal_infrastructure_grpc_pb_stream_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_internal_infrastructure_grpc_pb_stream_proto_rawDesc), len(file_internal_infrastructure_grpc_pb_stream_proto_rawDesc)))
 	})
-	return file_internal_api_grpc_pb_stream_proto_rawDescData
+	return file_internal_infrastructure_grpc_pb_stream_proto_rawDescData
 }
 
-var file_internal_api_grpc_pb_stream_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
-var file_internal_api_grpc_pb_stream_proto_goTypes = []any{
+var file_internal_infrastructure_grpc_pb_stream_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_internal_infrastructure_grpc_pb_stream_proto_goTypes = []any{
 	(*GetStateRequest)(nil),     // 0: stream.GetStateRequest
 	(*AdvanceRequest)(nil),      // 1: stream.AdvanceRequest
 	(*StreamStateResponse)(nil), // 2: stream.StreamStateResponse
 }
-var file_internal_api_grpc_pb_stream_proto_depIdxs = []int32{
+var file_internal_infrastructure_grpc_pb_stream_proto_depIdxs = []int32{
 	0, // 0: stream.StreamService.GetState:input_type -> stream.GetStateRequest
 	1, // 1: stream.StreamService.Advance:input_type -> stream.AdvanceRequest
 	2, // 2: stream.StreamService.GetState:output_type -> stream.StreamStateResponse
@@ -244,26 +244,26 @@ var file_internal_api_grpc_pb_stream_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for field type_name
 }
 
-func init() { file_internal_api_grpc_pb_stream_proto_init() }
-func file_internal_api_grpc_pb_stream_proto_init() {
-	if File_internal_api_grpc_pb_stream_proto != nil {
+func init() { file_internal_infrastructure_grpc_pb_stream_proto_init() }
+func file_internal_infrastructure_grpc_pb_stream_proto_init() {
+	if File_internal_infrastructure_grpc_pb_stream_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_api_grpc_pb_stream_proto_rawDesc), len(file_internal_api_grpc_pb_stream_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_infrastructure_grpc_pb_stream_proto_rawDesc), len(file_internal_infrastructure_grpc_pb_stream_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_internal_api_grpc_pb_stream_proto_goTypes,
-		DependencyIndexes: file_internal_api_grpc_pb_stream_proto_depIdxs,
-		MessageInfos:      file_internal_api_grpc_pb_stream_proto_msgTypes,
+		GoTypes:           file_internal_infrastructure_grpc_pb_stream_proto_goTypes,
+		DependencyIndexes: file_internal_infrastructure_grpc_pb_stream_proto_depIdxs,
+		MessageInfos:      file_internal_infrastructure_grpc_pb_stream_proto_msgTypes,
 	}.Build()
-	File_internal_api_grpc_pb_stream_proto = out.File
-	file_internal_api_grpc_pb_stream_proto_goTypes = nil
-	file_internal_api_grpc_pb_stream_proto_depIdxs = nil
+	File_internal_infrastructure_grpc_pb_stream_proto = out.File
+	file_internal_infrastructure_grpc_pb_stream_proto_goTypes = nil
+	file_internal_infrastructure_grpc_pb_stream_proto_depIdxs = nil
 }

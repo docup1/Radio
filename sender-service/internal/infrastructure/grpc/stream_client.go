@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"radio/sender-service/internal/domain/models"
-	pb "radio/sender-service/internal/api/grpc/pb"
+	pb "radio/sender-service/internal/infrastructure/grpc/pb"
 )
 
 type StreamClient struct {
