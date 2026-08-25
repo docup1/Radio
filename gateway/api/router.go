@@ -42,7 +42,7 @@ func NewRouter(cfg *infra.Config) http.Handler {
 	content.Register(mux, content.New(restProxy, streamProxy, authSvc))
 
 	if cfg.Upstreams.StreamService != "" {
-		streamProxy := infra.NewProxy(cfg.Upstreams.StreamService, "/api/streams")
+		streamProxy := infra.NewProxy(cfg.Upstreams.StreamService, "/api")
 		var wsProxy *infra.WSProxy
 		if cfg.Upstreams.SenderService != "" {
 			var err error

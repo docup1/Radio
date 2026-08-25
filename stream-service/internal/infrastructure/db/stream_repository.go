@@ -35,6 +35,26 @@ func (r *StreamRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.S
 	return &s, nil
 }
 
+func (r *StreamRepository) ListAll(ctx context.Context) ([]*models.Stream, error) {
+	rows, err := r.DB.QueryContext(ctx,
+		`SELECT id, name, description, loop, created_at, updated_at FROM streams ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var streams []*models.Stream
+	for rows.Next() {
+		var s models.Stream
+		if err := rows.Scan(&s.ID, &s.Name, &s.Description, &s.Loop, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			return nil, err
+		}
+		streams = append(streams, &s)
+	}
+	return streams, rows.Err()
+}
+
 func (r *StreamRepository) Update(ctx context.Context, s *models.Stream) error {
 	res, err := r.DB.ExecContext(ctx,
 		`UPDATE streams SET name=$1, description=$2, loop=$3, updated_at=now() WHERE id=$4`,

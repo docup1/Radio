@@ -32,6 +32,10 @@ func New(repos Repos, pub *redis.Publisher) *Service {
 
 // --- Stream CRUD ---
 
+func (s *Service) ListStreams(ctx context.Context) ([]*models.Stream, error) {
+	return s.repos.Streams.ListAll(ctx)
+}
+
 func (s *Service) CreateStream(ctx context.Context, id uuid.UUID, name, description string, loop bool) (*models.Stream, error) {
 	stream := &models.Stream{
 		ID:          id,

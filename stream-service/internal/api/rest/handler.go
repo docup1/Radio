@@ -30,6 +30,7 @@ func NewHandler(svc *application.Service, worker *application.Worker) http.Handl
 
 	// Stream CRUD
 	mux.HandleFunc("POST /streams", h.createStream)
+	mux.HandleFunc("GET /streams", h.listStreams)
 	mux.HandleFunc("GET /streams/{id}", h.getStream)
 	mux.HandleFunc("PUT /streams/{id}", h.updateStream)
 	mux.HandleFunc("DELETE /streams/{id}", h.deleteStream)
@@ -86,6 +87,27 @@ func (h *Handler) createStream(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:   stream.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt:   stream.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	})
+}
+
+func (h *Handler) listStreams(w http.ResponseWriter, r *http.Request) {
+	streams, err := h.svc.ListStreams(r.Context())
+	if err != nil {
+		WriteServiceError(w, err)
+		return
+	}
+
+	result := make([]dto.StreamResponse, 0, len(streams))
+	for _, s := range streams {
+		result = append(result, dto.StreamResponse{
+			ID:          s.ID,
+			Name:        s.Name,
+			Description: s.Description,
+			Loop:        s.Loop,
+			CreatedAt:   s.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			UpdatedAt:   s.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		})
+	}
+	WriteJSON(w, http.StatusOK, result)
 }
 
 func (h *Handler) getStream(w http.ResponseWriter, r *http.Request) {

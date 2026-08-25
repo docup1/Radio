@@ -12,6 +12,7 @@ import (
 type StreamRepository interface {
 	Create(ctx context.Context, stream *models.Stream) error
 	GetByID(ctx context.Context, id uuid.UUID) (*models.Stream, error)
+	ListAll(ctx context.Context) ([]*models.Stream, error)
 	Update(ctx context.Context, stream *models.Stream) error
 	Delete(ctx context.Context, id uuid.UUID) error
 }
