@@ -3,6 +3,7 @@ package websocket
 import (
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync/atomic"
 
@@ -20,10 +21,11 @@ var listenerCounter int64
 
 type Handler struct {
 	hub *application.Hub
+	svc *application.Service
 }
 
-func NewHandler(hub *application.Hub) *Handler {
-	return &Handler{hub: hub}
+func NewHandler(hub *application.Hub, svc *application.Service) *Handler {
+	return &Handler{hub: hub, svc: svc}
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -40,11 +42,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if stream exists
+	// Check if stream hub exists, auto-start if not
 	sh := h.hub.Get(streamID)
 	if sh == nil {
-		http.Error(w, "stream not found", http.StatusNotFound)
-		return
+		h.svc.StartStream(streamID)
+		sh = h.hub.Get(streamID)
+		if sh == nil {
+			http.Error(w, "stream not active", http.StatusNotFound)
+			return
+		}
 	}
 
 	// Upgrade to WebSocket
@@ -56,7 +62,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	listenerID := atomic.AddInt64(&listenerCounter, 1)
 	l := &application.Listener{
-		ID:  string(rune(listenerID)),
+		ID:  strconv.FormatInt(listenerID, 10),
 		Ch:  make(chan []byte, 100),
 		Hub: sh,
 	}

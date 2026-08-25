@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { Stream } from '@/shared/api/types'
+import type { PlayerState } from '../composables/useWebSocketPlayer'
 
-defineProps<{ stream: Stream; currentSong: string | null; pulseScale: number }>()
-defineEmits<{ back: [] }>()
+defineProps<{ stream: Stream; currentSong: string | null; pulseScale: number; state: PlayerState }>()
+defineEmits<{ play: []; back: [] }>()
 </script>
 
 <template>
@@ -17,6 +18,16 @@ defineEmits<{ back: [] }>()
       <h1 class="stream-player__name">{{ stream.name }}</h1>
       <p v-if="stream.description" class="stream-player__desc">{{ stream.description }}</p>
       <p v-if="currentSong" class="stream-player__song">&#9835; {{ currentSong }}</p>
+
+      <button
+        v-if="state === 'idle' || state === 'ended'"
+        class="stream-player__play"
+        @click="$emit('play')"
+      >
+        &#9654; Слушать
+      </button>
+      <span v-else-if="state === 'connecting'" class="stream-player__status">Подключение...</span>
+      <span v-else-if="state === 'error'" class="stream-player__status stream-player__status--error">Ошибка</span>
     </div>
   </div>
 </template>
@@ -82,5 +93,26 @@ defineEmits<{ back: [] }>()
   font-size: 16px;
   color: var(--primary);
   margin: 0;
+}
+.stream-player__play {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  padding: 14px 36px;
+  border-radius: 8px;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 16px;
+}
+.stream-player__play:hover {
+  opacity: 0.9;
+}
+.stream-player__status {
+  font-size: 14px;
+  color: var(--muted);
+}
+.stream-player__status--error {
+  color: #ef4444;
 }
 </style>

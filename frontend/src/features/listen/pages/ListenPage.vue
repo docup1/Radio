@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { streamApi } from '@/shared/api/stream'
 import { useWebSocketPlayer } from '../composables/useWebSocketPlayer'
@@ -11,11 +11,18 @@ const router = useRouter()
 const { state, connect, disconnect } = useWebSocketPlayer()
 
 const stream = ref<Stream | null>(null)
+const loaded = ref(false)
 
-onMounted(async () => {
+async function loadStream() {
   stream.value = await streamApi.get(props.id)
+  loaded.value = true
+}
+
+loadStream()
+
+function onPlay() {
   connect(props.id)
-})
+}
 
 onUnmounted(() => disconnect())
 
@@ -31,6 +38,8 @@ function onBack() {
     :stream="stream"
     :current-song="state.currentSong"
     :pulse-scale="state.pulseScale"
+    :state="state.state"
+    @play="onPlay"
     @back="onBack"
   />
 </template>

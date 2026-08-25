@@ -51,3 +51,7 @@ type OutboxRepository interface {
 	FetchUnprocessed(ctx context.Context, limit int) ([]*models.OutboxEvent, error)
 	MarkProcessed(ctx context.Context, ids []uuid.UUID) error
 }
+
+type SongChecker interface {
+	Check(ctx context.Context, ownerID, songID string) (bool, error)
+}

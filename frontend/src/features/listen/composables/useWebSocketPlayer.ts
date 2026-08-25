@@ -43,6 +43,11 @@ export function useWebSocketPlayer() {
     analyser.fftSize = 256
     analyser.connect(audioCtx.destination)
 
+    // Resume after user gesture (browser blocks autoplay)
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume()
+    }
+
     ws = new WebSocket(`${WS_BASE}/api/streams/${streamId}/ws`)
     ws.binaryType = 'arraybuffer'
 

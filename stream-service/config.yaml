@@ -25,6 +25,8 @@ redis:
   db: 0
   connect_timeout: 5s
 
+content_service_grpc: "content-service:8082"
+
 worker:
   outbox_batch_size: 100
   outbox_interval: 100ms

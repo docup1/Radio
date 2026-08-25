@@ -57,7 +57,9 @@ func (s *Service) StartStream(streamID uuid.UUID) {
 	}
 
 	sh.UpdateState(*st.SongID, st.Revision, st.StartedAt.UnixNano())
-	go s.serveStream(streamID, sh)
+	ctx, cancel := context.WithCancel(context.Background())
+	sh.SetCancel(cancel)
+	go s.serveStream(ctx, streamID, sh)
 }
 
 // StopStream removes the hub for the given stream.
@@ -82,22 +84,31 @@ func (s *Service) OnSongChanged(streamID uuid.UUID) {
 	}
 
 	if st.SongID != nil && st.StartedAt != nil {
+		// Stop previous goroutine
+		sh.Cancel()
+
 		// Clear ETag cache for old song
 		if sh.SongID != uuid.Nil {
 			s.content.ClearETag(sh.SongID.String())
 		}
 		sh.UpdateState(*st.SongID, st.Revision, st.StartedAt.UnixNano())
-		go s.serveStream(streamID, sh)
+		ctx, cancel := context.WithCancel(context.Background())
+		sh.SetCancel(cancel)
+		go s.serveStream(ctx, streamID, sh)
 	}
 }
 
 // serveStream continuously fetches and broadcasts audio chunks.
-func (s *Service) serveStream(streamID uuid.UUID, sh *StreamHub) {
+func (s *Service) serveStream(ctx context.Context, streamID uuid.UUID, sh *StreamHub) {
+	log.Printf("[sender] serveStream started for stream %s, songID=%s, revision=%d", streamID, sh.SongID, sh.Revision)
 	ticker := time.NewTicker(200 * time.Millisecond) // fetch every 200ms
 	defer ticker.Stop()
+	defer log.Printf("[sender] serveStream stopped for stream %s", streamID)
 
 	for {
 		select {
+		case <-ctx.Done():
+			return
 		case <-ticker.C:
 			if sh.SongID == uuid.Nil {
 				return
@@ -106,10 +117,10 @@ func (s *Service) serveStream(streamID uuid.UUID, sh *StreamHub) {
 			// Calculate current position
 			startedAt := time.Unix(0, sh.StartedAt)
 			elapsed := time.Since(startedAt)
-			offset := elapsed.Milliseconds() * 16 / 1000 // ~16KB per second for mp3 128kbps
+			offset := elapsed.Milliseconds() * 16 // 128kbps = 16KB/s = 16 bytes/ms
 
-			// Fetch chunk from Content Service
-			chunk, err := s.content.FetchChunk(sh.SongID.String(), offset)
+			// Fetch chunk from Content Service (stream ID == owner ID)
+			chunk, err := s.content.FetchChunk(sh.SongID.String(), offset, streamID.String())
 			if err != nil {
 				log.Printf("[sender] fetch chunk %s offset=%d: %v", sh.SongID, offset, err)
 				continue
@@ -117,6 +128,7 @@ func (s *Service) serveStream(streamID uuid.UUID, sh *StreamHub) {
 
 			if chunk != nil {
 				sh.AddChunk(chunk)
+				log.Printf("[sender] chunk sent stream=%s offset=%d size=%d", streamID, offset, len(chunk))
 			}
 		}
 	}

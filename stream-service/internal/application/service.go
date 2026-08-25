@@ -22,12 +22,13 @@ type Repos struct {
 }
 
 type Service struct {
-	repos Repos
-	pub   *redis.Publisher
+	repos  Repos
+	pub    *redis.Publisher
+	checker interfaces.SongChecker
 }
 
-func New(repos Repos, pub *redis.Publisher) *Service {
-	return &Service{repos: repos, pub: pub}
+func New(repos Repos, pub *redis.Publisher, checker interfaces.SongChecker) *Service {
+	return &Service{repos: repos, pub: pub, checker: checker}
 }
 
 // --- Stream ---
@@ -92,6 +93,15 @@ func (s *Service) AddToQueue(ctx context.Context, streamID, songID uuid.UUID) (*
 	// Validate stream exists
 	if _, err := s.repos.Streams.GetByID(ctx, streamID); err != nil {
 		return nil, err
+	}
+
+	// Validate song via content-service
+	allowed, err := s.checker.Check(ctx, streamID.String(), songID.String())
+	if err != nil {
+		return nil, err
+	}
+	if !allowed {
+		return nil, models.ErrForbidden
 	}
 
 	pos, err := s.repos.Queue.MaxPosition(ctx, streamID)

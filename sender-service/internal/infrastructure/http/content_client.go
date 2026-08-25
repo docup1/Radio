@@ -25,9 +25,10 @@ func NewContentClient(baseURL string, chunkSize int64) *ContentClient {
 	}
 }
 
-// FetchChunk retrieves a chunk of audio for songID starting at offset.
-// Returns the raw bytes, or nil if 304 Not Modified (no new data).
-func (c *ContentClient) FetchChunk(songID string, offset int64) ([]byte, error) {
+// FetchChunk retrieves the full audio for songID.
+// ownerID is passed as X-Owner-ID header (required by content-service for access control).
+// Returns the full audio bytes for decoding by the client.
+func (c *ContentClient) FetchChunk(songID string, offset int64, ownerID string) ([]byte, error) {
 	url := fmt.Sprintf("%s/songs/%s/audio", c.baseURL, songID)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -35,26 +36,13 @@ func (c *ContentClient) FetchChunk(songID string, offset int64) ([]byte, error) 
 		return nil, err
 	}
 
-	end := offset + c.chunkSize - 1
-	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", offset, end))
-
-	if etag, ok := c.etagCache[songID]; ok {
-		req.Header.Set("If-None-Match", etag)
-	}
+	req.Header.Set("X-Owner-ID", ownerID)
 
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-
-	if etag := resp.Header.Get("ETag"); etag != "" {
-		c.etagCache[songID] = etag
-	}
-
-	if resp.StatusCode == http.StatusNotModified {
-		return nil, nil
-	}
 
 	if resp.StatusCode != http.StatusPartialContent && resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("content-service: unexpected status %d", resp.StatusCode)

@@ -15,6 +15,7 @@ import (
 	"radio/stream-service/internal/application"
 	"radio/stream-service/internal/infrastructure"
 	"radio/stream-service/internal/infrastructure/db"
+	contentgrpc "radio/stream-service/internal/infrastructure/grpc/content"
 	"radio/stream-service/internal/infrastructure/redis"
 )
 
@@ -41,6 +42,13 @@ func main() {
 	pub := redis.NewPublisher(rdb)
 	sub := redis.NewSubscriber(rdb)
 
+	checkCache := contentgrpc.NewCheckCache(5 * time.Minute)
+	contentClient, err := contentgrpc.NewContentClient(cfg.ContentServiceGRPC, checkCache)
+	if err != nil {
+		log.Fatalf("content grpc connect: %v", err)
+	}
+	defer contentClient.Close()
+
 	repos := application.Repos{
 		Streams:  &db.StreamRepository{DB: conn},
 		State:    &db.StreamStateRepository{DB: conn},
@@ -48,7 +56,7 @@ func main() {
 		Hashtags: &db.HashtagRepository{DB: conn},
 		Outbox:   &db.OutboxRepository{DB: conn},
 	}
-	svc := application.New(repos, pub)
+	svc := application.New(repos, pub, contentClient)
 
 	worker := application.NewWorker(svc, pub, sub, application.WorkerConfig{
 		BatchSize:        cfg.Worker.OutboxBatchSize,

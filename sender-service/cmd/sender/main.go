@@ -64,7 +64,7 @@ func main() {
 	go worker.Run(ctx)
 
 	// WebSocket handler
-	wsHandler := websocket.NewHandler(hub)
+	wsHandler := websocket.NewHandler(hub, svc)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTP.Addr,

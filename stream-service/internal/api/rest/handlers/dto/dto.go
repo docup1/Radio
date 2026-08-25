@@ -15,7 +15,7 @@ type UpdateStreamRequest struct {
 }
 
 type AddToQueueRequest struct {
-	SongID uuid.UUID `json:"songId"`
+	SongID uuid.UUID `json:"song_id"`
 }
 
 type MoveQueueRequest struct {

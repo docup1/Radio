@@ -120,10 +120,13 @@ services:
         condition: service_healthy
       stream-service-migrations:
         condition: service_completed_successfully
+      content-service:
+        condition: service_started
     environment:
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       APP_ENV: dev
       SWAGGER_ENABLED: "true"
+      CONTENT_SERVICE_GRPC: "content-service:8082"
     volumes:
       - ./stream-service/config.yaml:/app/config.yaml:ro
     ports:

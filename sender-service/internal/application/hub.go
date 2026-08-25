@@ -1,6 +1,7 @@
 package application
 
 import (
+	"context"
 	"log"
 	"sync"
 
@@ -26,6 +27,8 @@ type StreamHub struct {
 	// WebSocket listeners
 	Listeners map[*Listener]struct{}
 	mu        sync.RWMutex
+
+	cancel context.CancelFunc
 }
 
 type Listener struct {
@@ -137,4 +140,21 @@ func (sh *StreamHub) Unsubscribe(l *Listener) {
 	sh.mu.Lock()
 	defer sh.mu.Unlock()
 	delete(sh.Listeners, l)
+}
+
+// SetCancel stores the cancel function for the current serveStream goroutine.
+func (sh *StreamHub) SetCancel(cancel context.CancelFunc) {
+	sh.mu.Lock()
+	defer sh.mu.Unlock()
+	sh.cancel = cancel
+}
+
+// Cancel stops the current serveStream goroutine.
+func (sh *StreamHub) Cancel() {
+	sh.mu.RLock()
+	cancel := sh.cancel
+	sh.mu.RUnlock()
+	if cancel != nil {
+		cancel()
+	}
 }

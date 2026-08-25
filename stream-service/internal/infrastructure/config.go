@@ -62,14 +62,15 @@ type WorkerConfig struct {
 }
 
 type Config struct {
-	Env      string     `yaml:"env"`
-	LogLevel string     `yaml:"log_level"`
-	HTTP     HTTPConfig `yaml:"http"`
-	GRPC     GRPCConfig `yaml:"grpc"`
-	DB       DBConfig   `yaml:"db"`
-	Redis    RedisConfig `yaml:"redis"`
-	Worker   WorkerConfig `yaml:"worker"`
-	Swagger  SwaggerConfig `yaml:"swagger"`
+	Env                string        `yaml:"env"`
+	LogLevel           string        `yaml:"log_level"`
+	HTTP               HTTPConfig    `yaml:"http"`
+	GRPC               GRPCConfig    `yaml:"grpc"`
+	DB                 DBConfig      `yaml:"db"`
+	Redis              RedisConfig   `yaml:"redis"`
+	Worker             WorkerConfig  `yaml:"worker"`
+	Swagger            SwaggerConfig `yaml:"swagger"`
+	ContentServiceGRPC string        `yaml:"content_service_grpc"`
 
 	DBPassword string
 }
@@ -144,6 +145,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if v := os.Getenv("SWAGGER_ENABLED"); v != "" {
 		cfg.Swagger.Enabled = strings.EqualFold(v, "true") || v == "1"
+	}
+	if v := os.Getenv("CONTENT_SERVICE_GRPC"); v != "" {
+		cfg.ContentServiceGRPC = v
 	}
 
 	cfg.DBPassword = os.Getenv("DB_PASSWORD")
