@@ -23,9 +23,12 @@ async function onLogout() {
       <nav v-if="isAuthenticated" class="nav">
         <RouterLink to="/content/songs" class="nav-link">Песни</RouterLink>
         <RouterLink to="/content/playlists" class="nav-link">Плейлисты</RouterLink>
+        <RouterLink to="/content/streams" class="nav-link">Стримы</RouterLink>
+        <RouterLink to="/streams" class="nav-link">Лента</RouterLink>
         <RouterLink to="/profile" class="nav-link">Профиль</RouterLink>
       </nav>
       <nav v-else class="nav">
+        <RouterLink to="/streams" class="nav-link">Лента</RouterLink>
         <RouterLink to="/login" class="nav-link">Вход</RouterLink>
         <RouterLink to="/register" class="nav-link">Регистрация</RouterLink>
       </nav>

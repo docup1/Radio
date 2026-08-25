@@ -78,3 +78,44 @@ export interface InitUploadInput {
   expected_size: number
   expected_hash?: string
 }
+
+// ---- Stream service ----
+
+export interface Stream {
+  id: string
+  owner_id: string
+  name: string
+  description: string
+  loop: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface StreamState {
+  stream_id: string
+  current_queue_id: string | null
+  song_id: string | null
+  started_at: string | null
+  is_active: boolean
+  revision: number
+}
+
+export interface QueueItem {
+  id: string
+  stream_id: string
+  song_id: string
+  position: number
+  song?: Song
+}
+
+export interface CreateStreamInput {
+  name: string
+  description?: string
+  loop?: boolean
+}
+
+export interface UpdateStreamInput {
+  name?: string
+  description?: string
+  loop?: boolean
+}

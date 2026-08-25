@@ -8,6 +8,11 @@ import SongDetailPage from '@/features/content/pages/SongDetailPage.vue'
 import SongEditPage from '@/features/content/pages/SongEditPage.vue'
 import PlaylistsPage from '@/features/content/pages/PlaylistsPage.vue'
 import PlaylistDetailPage from '@/features/content/pages/PlaylistDetailPage.vue'
+import StreamsPage from '@/features/streams/pages/StreamsPage.vue'
+import StreamNewPage from '@/features/streams/pages/StreamNewPage.vue'
+import StreamDetailPage from '@/features/streams/pages/StreamDetailPage.vue'
+import FeedPage from '@/features/listen/pages/FeedPage.vue'
+import ListenPage from '@/features/listen/pages/ListenPage.vue'
 import { isAuthenticated } from '@/shared/store/auth'
 
 const router = createRouter({
@@ -33,14 +38,31 @@ const router = createRouter({
       component: PlaylistDetailPage,
       props: true,
     },
+    { path: '/content/streams', name: 'streams', component: StreamsPage },
+    { path: '/content/streams/new', name: 'stream-new', component: StreamNewPage },
+    {
+      path: '/content/streams/:id',
+      name: 'stream-detail',
+      component: StreamDetailPage,
+      props: true,
+    },
+    { path: '/streams', name: 'feed', component: FeedPage, meta: { public: true, publicAlways: true } },
+    {
+      path: '/streams/:id/listen',
+      name: 'listen',
+      component: ListenPage,
+      props: true,
+      meta: { public: true, publicAlways: true },
+    },
   ],
 })
 
 router.beforeEach((to) => {
+  const publicAlways = to.meta.publicAlways as boolean | undefined
   if (!to.meta.public && !isAuthenticated.value) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
-  if (to.meta.public && isAuthenticated.value) {
+  if (to.meta.public && !publicAlways && isAuthenticated.value) {
     return { name: 'profile' }
   }
   return true
