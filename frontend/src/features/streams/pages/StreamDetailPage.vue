@@ -9,7 +9,7 @@ import type { QueueItem } from '@/shared/api/types'
 const props = defineProps<{ id: string }>()
 const router = useRouter()
 
-const { current, currentState, get, start, stop, update } = useStreams()
+const { stream: current, currentState, get, start, stop, update } = useStreams()
 const { queue, load: loadQueue, add, remove, reorder } = useStreamQueue(props.id)
 const { songs, query, loading: songsLoading, load: loadSongs, setQuery } = useSongs()
 
