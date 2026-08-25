@@ -3,6 +3,7 @@ module radio/gateway
 go 1.24
 
 require (
+	github.com/gorilla/websocket v1.5.3
 	github.com/swaggo/http-swagger v1.3.4
 	gopkg.in/yaml.v3 v3.0.1
 )

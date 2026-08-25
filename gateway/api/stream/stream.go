@@ -2,9 +2,20 @@ package stream
 
 import (
 	"net/http"
+	"strings"
 
 	"radio/gateway/infra"
 )
+
+func (h *Handler) route(w http.ResponseWriter, r *http.Request) {
+	// /api/streams/{id}/ws → WebSocket proxy (no auth)
+	if strings.HasSuffix(r.URL.Path, "/ws") {
+		h.ws(w, r)
+		return
+	}
+	// Everything else → REST proxy (auth required)
+	h.stream(w, r)
+}
 
 func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {
 	r.Header.Del("X-Owner-ID")

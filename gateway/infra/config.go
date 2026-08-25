@@ -34,6 +34,7 @@ type UpstreamsConfig struct {
 	ContentService string `yaml:"content_service"`
 	ContentStream  string `yaml:"content_stream"`
 	StreamService  string `yaml:"stream_service"`
+	SenderService  string `yaml:"sender_service"`
 }
 
 type CookieConfig struct {
@@ -113,6 +114,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if v := os.Getenv("STREAM_SERVICE_URL"); v != "" {
 		cfg.Upstreams.StreamService = v
+	}
+	if v := os.Getenv("SENDER_SERVICE_URL"); v != "" {
+		cfg.Upstreams.SenderService = v
 	}
 	if v := os.Getenv("COOKIE_NAME"); v != "" {
 		cfg.Cookie.Name = v

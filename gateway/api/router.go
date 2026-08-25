@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log"
 	"net/http"
 	"time"
 
@@ -42,7 +43,15 @@ func NewRouter(cfg *infra.Config) http.Handler {
 
 	if cfg.Upstreams.StreamService != "" {
 		streamProxy := infra.NewProxy(cfg.Upstreams.StreamService, "/api/streams")
-		stream.Register(mux, stream.New(streamProxy, authSvc))
+		var wsProxy *infra.WSProxy
+		if cfg.Upstreams.SenderService != "" {
+			var err error
+			wsProxy, err = infra.NewWSProxy(cfg.Upstreams.SenderService)
+			if err != nil {
+				log.Printf("warn: sender_service WS proxy disabled: %v", err)
+			}
+		}
+		stream.Register(mux, stream.New(streamProxy, authSvc, wsProxy))
 	}
 
 	infra.Mount(mux, cfg)

@@ -7,6 +7,7 @@ upstreams:
   content_service: "http://content-service:8080"
   content_stream: "http://content-service:8081"
   stream_service: "http://stream-service:8080"
+  sender_service: "ws://sender-service:8081"
 cookie:
   name: "access_token"
   path: "/"

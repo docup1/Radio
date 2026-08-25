@@ -153,6 +153,8 @@ services:
         condition: service_started
       stream-service:
         condition: service_started
+      sender-service:
+        condition: service_started
     environment:
       APP_ENV: dev
       GATEWAY_ADDR: ":8080"
@@ -161,6 +163,7 @@ services:
       CONTENT_SERVICE_URL: "http://content-service:8080"
       CONTENT_STREAM_URL: "http://content-service:8081"
       STREAM_SERVICE_URL: "http://stream-service:8080"
+      SENDER_SERVICE_URL: "ws://sender-service:8081"
       COOKIE_NAME: "access_token"
       COOKIE_MAX_AGE: "86400"
       COOKIE_SECURE_IN_PROD: "true"
