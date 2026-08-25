@@ -1,6 +1,6 @@
 module radio/sender-service
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/google/uuid v1.6.0

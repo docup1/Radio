@@ -1,19 +1,12 @@
-SERVICE := user-service
-SERVICE_DIR := $(SERVICE)
-BIN := bin/user-service-linux
-
 GOARCH := $(shell uname -m | sed -e 's/^x86_64$$/amd64/' -e 's/^aarch64$$/arm64/')
-GOBUILD := CGO_ENABLED=0 GOOS=linux GOARCH=$(GOARCH) go build -ldflags="-s -w" -o $(BIN)
-
-PORT_FILE := .env
-SERVICE_PORT := $(shell grep -E '^USER_SERVICE_PORT=' $(PORT_FILE) 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')
-SERVICE_PORT := $(if $(SERVICE_PORT),$(SERVICE_PORT),18080)
 
 FRONTEND_DIR := frontend
 GATEWAY_DIST := gateway/dist
 
-.PHONY: dev prod user-dev build down clean \
-         front-install front-dev front-build front-dist
+.PHONY: dev prod build down clean \
+         front-install front-dev front-build front-dist \
+         user-dev cs-build cs-dev cs-down \
+         ss-build ss-dev snd-build snd-dev
 
 # ---------- frontend ----------
 front-install:
@@ -22,7 +15,6 @@ front-install:
 front-build: front-install
 	cd $(FRONTEND_DIR) && npm run build
 
-# Copy the built SPA into the gateway image build context so `make prod` can bake it in.
 front-dist: front-build
 	rm -rf $(GATEWAY_DIST)
 	cp -r $(FRONTEND_DIR)/dist $(GATEWAY_DIST)
@@ -30,52 +22,67 @@ front-dist: front-build
 front-dev: front-install
 	cd $(FRONTEND_DIR) && npm run dev
 
-# ---------- backend (user-service only) ----------
+# ---------- user-service ----------
+build:
+	@echo "building user-service linux/$(GOARCH)"
+	cd user-service && CGO_ENABLED=0 GOOS=linux GOARCH=$(GOARCH) go build -ldflags="-s -w" -o bin/user-service-linux .
+
 user-dev: build
-	@echo "freeing port $(SERVICE_PORT)"
-	@lsof -ti tcp:$(SERVICE_PORT) -sTCP:LISTEN 2>/dev/null | while read pid; do \
+	@echo "freeing user-service ports"
+	@lsof -ti tcp:18080 -sTCP:LISTEN 2>/dev/null | while read pid; do \
 		cmd=$$(ps -o command= -p $$pid 2>/dev/null); \
 		case "$$cmd" in \
 			*OrbStack*|*com.docker*|*Docker*) echo "skip $$pid (container port binding)";; \
 			*) echo "killing $$pid ($$cmd)"; kill -9 $$pid 2>/dev/null || true;; \
 		esac; \
 	done
-	docker compose up -d --build --force-recreate $(SERVICE)
+	docker compose up -d --build --force-recreate user-service
 
-# ---------- full stack (dev) ----------
-# Backend (docker compose) + frontend vite, both in the foreground with logs to the
-# console. Ctrl-C stops everything. Uses the already-built images (no rebuild);
-# rebuild backend separately when needed.
+# ---------- content-service ----------
+cs-build:
+	@echo "building content-service linux/$(GOARCH)"
+	cd content-service && CGO_ENABLED=0 GOOS=linux GOARCH=$(GOARCH) go build -ldflags="-s -w" -o bin/content-service ./cmd/content
+
+cs-dev: cs-build
+	@echo "freeing content-service ports"
+	@lsof -ti tcp:18092 -sTCP:LISTEN 2>/dev/null | while read pid; do \
+		cmd=$$(ps -o command= -p $$pid 2>/dev/null); \
+		case "$$cmd" in \
+			*OrbStack*|*com.docker*|*Docker*) echo "skip $$pid (container port binding)";; \
+			*) echo "killing $$pid ($$cmd)"; kill -9 $$pid 2>/dev/null || true;; \
+		esac; \
+	done
+	docker compose up -d --build --force-recreate content-service-migrations content-service
+
+cs-down:
+	docker compose stop content-service-migrations content-service
+
+# ---------- stream-service ----------
+ss-build:
+	@echo "building stream-service linux/$(GOARCH)"
+	cd stream-service && CGO_ENABLED=0 GOOS=linux GOARCH=$(GOARCH) go build -ldflags="-s -w" -o bin/stream ./cmd/stream
+
+ss-dev: ss-build
+	docker compose up -d --build --force-recreate stream-service
+
+# ---------- sender-service ----------
+snd-build:
+	@echo "building sender-service linux/$(GOARCH)"
+	cd sender-service && CGO_ENABLED=0 GOOS=linux GOARCH=$(GOARCH) go build -ldflags="-s -w" -o bin/sender ./cmd/sender
+
+snd-dev: snd-build
+	docker compose up -d --build --force-recreate sender-service
+
+# ---------- full stack ----------
 dev:
 	sh $(CURDIR)/scripts/dev.sh
 
-# ---------- full stack (prod) ----------
-# Build the SPA, bake it into the gateway image (STATIC_DIR), then bring up everything.
-prod: build cs-build front-dist
+prod: build cs-build ss-build snd-build front-dist
 	docker compose build
 	docker compose up -d
-
-build:
-	@echo "building $(BIN) (linux/$(GOARCH))"
-	cd $(SERVICE_DIR) && $(GOBUILD) .
 
 down:
 	docker compose down
 
 clean:
-	rm -rf $(SERVICE_DIR)/bin
-
-# ---- content-service ----
-CS_DIR := content-service
-CS_PORTS := 18092
-
-.PHONY: cs-build cs-dev cs-down
-cs-build:
-	echo "building content-service linux/$(GOARCH) binaries"
-	cd $(CS_DIR) && CGO_ENABLED=0 GOOS=linux GOARCH=$(GOARCH) go build -ldflags="-s -w" -o bin/content-service ./cmd/content
-cs-dev: cs-build
-	echo "freeing content-service ports $(CS_PORTS)"
-	for p in $(CS_PORTS); do lsof -ti tcp:$$p -sTCP:LISTEN 2>/dev/null | while read pid; do cmd=$$(ps -o command= -p $$pid 2>/dev/null); case "$$cmd" in *OrbStack*|*com.docker*|*Docker*) echo "skip $$pid (container port binding)";; *) echo "killing $$pid ($$cmd)"; kill -9 $$pid 2>/dev/null || true;; esac; done; done
-	docker compose up -d --build --force-recreate content-service-migrations content-service
-cs-down:
-	docker compose stop content-service-migrations content-service
+	rm -rf user-service/bin content-service/bin stream-service/bin sender-service/bin
