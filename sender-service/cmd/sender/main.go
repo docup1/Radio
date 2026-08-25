@@ -12,6 +12,7 @@ import (
 	"radio/sender-service/internal/application"
 	"radio/sender-service/internal/infrastructure"
 	"radio/sender-service/internal/infrastructure/grpc"
+	contenthttp "radio/sender-service/internal/infrastructure/http"
 	"radio/sender-service/internal/infrastructure/redis"
 	"radio/sender-service/internal/api/websocket"
 )
@@ -41,11 +42,13 @@ func main() {
 	// Create hub (manages per-stream buffers + WebSocket listeners)
 	hub := application.NewHub()
 
+	// Content Service client (fetches audio chunks)
+	contentClient := contenthttp.NewContentClient(cfg.ContentServiceURL, cfg.ChunkSize)
+
 	// Create sender service
-	svc := application.NewService(streamClient, hub, application.SenderConfig{
-		ContentServiceURL: cfg.ContentServiceURL,
-		ChunkSize:         cfg.ChunkSize,
-		BufferSeconds:     cfg.BufferSeconds,
+	svc := application.NewService(streamClient, contentClient, hub, application.SenderConfig{
+		ChunkSize:     cfg.ChunkSize,
+		BufferSeconds: cfg.BufferSeconds,
 	})
 
 	// Redis subscriber (listens to stream:events)
