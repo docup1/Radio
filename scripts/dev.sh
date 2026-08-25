@@ -1,6 +1,6 @@
 #!/bin/sh
 # Dev orchestration for the full stack:
-#   - backend via docker compose (logs to console)
+#   - backend via docker compose (rebuild, logs to console)
 #   - frontend via vite (HMR, logs to console)
 # Both run in the foreground of this script; Ctrl-C (SIGINT) stops everything
 # (vite killed, containers brought down).
@@ -10,7 +10,7 @@ cd "$(dirname "$0")/.."
 
 mkdir -p gateway/dist
 
-docker compose up & COMPOSE_PID=$!
+docker compose up --build & COMPOSE_PID=$!
 
 (cd frontend && npm install && npm run dev) & VITE_PID=$!
 

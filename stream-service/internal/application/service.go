@@ -58,7 +58,7 @@ func (s *Service) GetOrCreateStream(ctx context.Context, userID uuid.UUID) (*mod
 	if err := s.repos.State.Create(ctx, state); err != nil {
 		return nil, err
 	}
-	return stream, nil
+	return s.repos.Streams.GetByID(ctx, userID)
 }
 
 func (s *Service) GetStream(ctx context.Context, id uuid.UUID) (*models.Stream, error) {

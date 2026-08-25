@@ -12,9 +12,7 @@ databaseChangeLog:
                   constraints:
                     primaryKey: true
                     nullable: false
-                    foreignKeyName: fk_streams_user_id
-                    references: users(id)
-                    deleteCascade: true
+                    nullable: false
               - column:
                   name: name
                   type: varchar(128)

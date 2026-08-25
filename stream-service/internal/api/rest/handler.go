@@ -8,6 +8,7 @@ import (
 
 	"radio/stream-service/internal/api/rest/handlers/dto"
 	"radio/stream-service/internal/application"
+	"radio/stream-service/internal/domain/models"
 )
 
 type Handler struct {
@@ -30,6 +31,7 @@ func NewHandler(svc *application.Service, worker *application.Worker) http.Handl
 
 	// Stream
 	mux.HandleFunc("GET /streams", h.getUserStream)
+	mux.HandleFunc("GET /streams/", h.getUserStream)
 	mux.HandleFunc("GET /streams/feed", h.feed)
 	mux.HandleFunc("GET /streams/{id}", h.getStream)
 	mux.HandleFunc("PUT /streams/{id}", h.updateStream)
@@ -57,15 +59,23 @@ func NewHandler(svc *application.Service, worker *application.Worker) http.Handl
 	return mux
 }
 
+func (h *Handler) ensureStream(w http.ResponseWriter, r *http.Request, ownerID uuid.UUID) (*models.Stream, bool) {
+	stream, err := h.svc.GetOrCreateStream(r.Context(), ownerID)
+	if err != nil {
+		WriteServiceError(w, err)
+		return nil, false
+	}
+	return stream, true
+}
+
 func (h *Handler) getUserStream(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := ownerOrError(w, r)
 	if !ok {
 		return
 	}
 
-	stream, err := h.svc.GetOrCreateStream(r.Context(), ownerID)
-	if err != nil {
-		WriteServiceError(w, err)
+	stream, ok := h.ensureStream(w, r, ownerID)
+	if !ok {
 		return
 	}
 
@@ -139,6 +149,10 @@ func (h *Handler) updateStream(w http.ResponseWriter, r *http.Request) {
 	}
 	if id != ownerID {
 		WriteError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	if _, ok := h.ensureStream(w, r, ownerID); !ok {
 		return
 	}
 
@@ -229,6 +243,10 @@ func (h *Handler) startStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if _, ok := h.ensureStream(w, r, ownerID); !ok {
+		return
+	}
+
 	st, err := h.svc.StartStream(r.Context(), id)
 	if err != nil {
 		WriteServiceError(w, err)
@@ -262,6 +280,10 @@ func (h *Handler) stopStream(w http.ResponseWriter, r *http.Request) {
 	}
 	if id != ownerID {
 		WriteError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	if _, ok := h.ensureStream(w, r, ownerID); !ok {
 		return
 	}
 
@@ -323,6 +345,10 @@ func (h *Handler) addToQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if _, ok := h.ensureStream(w, r, ownerID); !ok {
+		return
+	}
+
 	var req dto.AddToQueueRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		WriteError(w, http.StatusBadRequest, "invalid json")
@@ -359,6 +385,11 @@ func (h *Handler) removeFromQueue(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusForbidden, "forbidden")
 		return
 	}
+
+	if _, ok := h.ensureStream(w, r, ownerID); !ok {
+		return
+	}
+
 	itemID, err := uuid.Parse(r.PathValue("itemId"))
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, "invalid item id")
@@ -388,6 +419,11 @@ func (h *Handler) moveQueueItem(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusForbidden, "forbidden")
 		return
 	}
+
+	if _, ok := h.ensureStream(w, r, ownerID); !ok {
+		return
+	}
+
 	itemID, err := uuid.Parse(r.PathValue("itemId"))
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, "invalid item id")
@@ -449,6 +485,10 @@ func (h *Handler) addHashtag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if _, ok := h.ensureStream(w, r, ownerID); !ok {
+		return
+	}
+
 	var req dto.AddHashtagRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		WriteError(w, http.StatusBadRequest, "invalid json")
@@ -483,6 +523,11 @@ func (h *Handler) removeHashtag(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusForbidden, "forbidden")
 		return
 	}
+
+	if _, ok := h.ensureStream(w, r, ownerID); !ok {
+		return
+	}
+
 	hashtagID, err := uuid.Parse(r.PathValue("hashtagId"))
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, "invalid hashtag id")
