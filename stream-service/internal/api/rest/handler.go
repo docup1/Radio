@@ -28,9 +28,9 @@ func NewHandler(svc *application.Service, worker *application.Worker) http.Handl
 	// Health
 	mux.HandleFunc("GET /healthz", h.healthz)
 
-	// Stream CRUD
-	mux.HandleFunc("POST /streams", h.createStream)
-	mux.HandleFunc("GET /streams", h.listStreams)
+	// Stream
+	mux.HandleFunc("GET /streams", h.getUserStream)
+	mux.HandleFunc("GET /streams/feed", h.feed)
 	mux.HandleFunc("GET /streams/{id}", h.getStream)
 	mux.HandleFunc("PUT /streams/{id}", h.updateStream)
 	mux.HandleFunc("DELETE /streams/{id}", h.deleteStream)
@@ -57,29 +57,19 @@ func NewHandler(svc *application.Service, worker *application.Worker) http.Handl
 	return mux
 }
 
-func (h *Handler) createStream(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) getUserStream(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := ownerOrError(w, r)
 	if !ok {
 		return
 	}
 
-	var req dto.CreateStreamRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteError(w, http.StatusBadRequest, "invalid json")
-		return
-	}
-	if req.Name == "" {
-		WriteError(w, http.StatusBadRequest, "name is required")
-		return
-	}
-
-	stream, err := h.svc.CreateStream(r.Context(), ownerID, req.Name, req.Description, req.Loop)
+	stream, err := h.svc.GetOrCreateStream(r.Context(), ownerID)
 	if err != nil {
 		WriteServiceError(w, err)
 		return
 	}
 
-	WriteJSON(w, http.StatusCreated, dto.StreamResponse{
+	WriteJSON(w, http.StatusOK, dto.StreamResponse{
 		ID:          stream.ID,
 		Name:        stream.Name,
 		Description: stream.Description,
@@ -89,22 +79,26 @@ func (h *Handler) createStream(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) listStreams(w http.ResponseWriter, r *http.Request) {
-	streams, err := h.svc.ListStreams(r.Context())
+func (h *Handler) feed(w http.ResponseWriter, r *http.Request) {
+	states, err := h.svc.ListActiveStreams(r.Context())
 	if err != nil {
 		WriteServiceError(w, err)
 		return
 	}
 
-	result := make([]dto.StreamResponse, 0, len(streams))
-	for _, s := range streams {
+	result := make([]dto.StreamResponse, 0, len(states))
+	for _, st := range states {
+		stream, err := h.svc.GetStream(r.Context(), st.StreamID)
+		if err != nil {
+			continue
+		}
 		result = append(result, dto.StreamResponse{
-			ID:          s.ID,
-			Name:        s.Name,
-			Description: s.Description,
-			Loop:        s.Loop,
-			CreatedAt:   s.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-			UpdatedAt:   s.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			ID:          stream.ID,
+			Name:        stream.Name,
+			Description: stream.Description,
+			Loop:        stream.Loop,
+			CreatedAt:   stream.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			UpdatedAt:   stream.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		})
 	}
 	WriteJSON(w, http.StatusOK, result)

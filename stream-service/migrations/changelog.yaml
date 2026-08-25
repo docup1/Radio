@@ -12,6 +12,9 @@ databaseChangeLog:
                   constraints:
                     primaryKey: true
                     nullable: false
+                    foreignKeyName: fk_streams_user_id
+                    references: users(id)
+                    deleteCascade: true
               - column:
                   name: name
                   type: varchar(128)
@@ -261,28 +264,3 @@ databaseChangeLog:
       rollback:
         - dropTable:
             tableName: outbox
-
-  - changeSet:
-      id: 006-fix-stream-state-fk-set-null
-      author: radio
-      changes:
-        - dropForeignKeyConstraint:
-            baseTableName: stream_state
-            constraintName: fk_stream_state_current_queue_id
-        - addForeignKeyConstraint:
-            baseTableName: stream_state
-            baseColumnNames: current_queue_id
-            constraintName: fk_stream_state_current_queue_id
-            referencedTableName: stream_queue
-            referencedColumnNames: id
-            onDelete: SET NULL
-      rollback:
-        - dropForeignKeyConstraint:
-            baseTableName: stream_state
-            constraintName: fk_stream_state_current_queue_id
-        - addForeignKeyConstraint:
-            baseTableName: stream_state
-            baseColumnNames: current_queue_id
-            constraintName: fk_stream_state_current_queue_id
-            referencedTableName: stream_queue
-            referencedColumnNames: id

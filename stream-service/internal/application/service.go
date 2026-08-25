@@ -30,26 +30,28 @@ func New(repos Repos, pub *redis.Publisher) *Service {
 	return &Service{repos: repos, pub: pub}
 }
 
-// --- Stream CRUD ---
+// --- Stream ---
 
-func (s *Service) ListStreams(ctx context.Context) ([]*models.Stream, error) {
-	return s.repos.Streams.ListAll(ctx)
-}
+func (s *Service) GetOrCreateStream(ctx context.Context, userID uuid.UUID) (*models.Stream, error) {
+	stream, err := s.repos.Streams.GetByID(ctx, userID)
+	if err == nil {
+		return stream, nil
+	}
+	if err != models.ErrNotFound {
+		return nil, err
+	}
 
-func (s *Service) CreateStream(ctx context.Context, id uuid.UUID, name, description string, loop bool) (*models.Stream, error) {
-	stream := &models.Stream{
-		ID:          id,
-		Name:        name,
-		Description: description,
-		Loop:        loop,
+	// Lazy-create stream with default name
+	stream = &models.Stream{
+		ID:   userID,
+		Name: "My Stream",
 	}
 	if err := s.repos.Streams.Create(ctx, stream); err != nil {
 		return nil, err
 	}
 
-	// Lazy-init state
 	state := &models.StreamState{
-		StreamID: id,
+		StreamID: userID,
 		IsActive: false,
 		Revision: 0,
 	}
@@ -61,6 +63,10 @@ func (s *Service) CreateStream(ctx context.Context, id uuid.UUID, name, descript
 
 func (s *Service) GetStream(ctx context.Context, id uuid.UUID) (*models.Stream, error) {
 	return s.repos.Streams.GetByID(ctx, id)
+}
+
+func (s *Service) ListActiveStreams(ctx context.Context) ([]*models.StreamState, error) {
+	return s.repos.State.ListActive(ctx)
 }
 
 func (s *Service) UpdateStream(ctx context.Context, id uuid.UUID, name, description string, loop bool) (*models.Stream, error) {

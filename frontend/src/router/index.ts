@@ -9,7 +9,6 @@ import SongEditPage from '@/features/content/pages/SongEditPage.vue'
 import PlaylistsPage from '@/features/content/pages/PlaylistsPage.vue'
 import PlaylistDetailPage from '@/features/content/pages/PlaylistDetailPage.vue'
 import StreamsPage from '@/features/streams/pages/StreamsPage.vue'
-import StreamNewPage from '@/features/streams/pages/StreamNewPage.vue'
 import StreamDetailPage from '@/features/streams/pages/StreamDetailPage.vue'
 import FeedPage from '@/features/listen/pages/FeedPage.vue'
 import ListenPage from '@/features/listen/pages/ListenPage.vue'
@@ -39,7 +38,6 @@ const router = createRouter({
       props: true,
     },
     { path: '/content/streams', name: 'streams', component: StreamsPage },
-    { path: '/content/streams/new', name: 'stream-new', component: StreamNewPage },
     {
       path: '/content/streams/:id',
       name: 'stream-detail',

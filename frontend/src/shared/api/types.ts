@@ -108,12 +108,6 @@ export interface QueueItem {
   song?: Song
 }
 
-export interface CreateStreamInput {
-  name: string
-  description?: string
-  loop?: boolean
-}
-
 export interface UpdateStreamInput {
   name?: string
   description?: string

@@ -3,14 +3,13 @@ import type {
   Stream,
   StreamState,
   QueueItem,
-  CreateStreamInput,
   UpdateStreamInput,
 } from './types'
 
 export const streamApi = {
-  list: () => request<Stream[]>('GET', '/api/streams/'),
+  getMine: () => request<Stream>('GET', '/api/streams/'),
 
-  create: (input: CreateStreamInput) => request<Stream>('POST', '/api/streams/', input),
+  getFeed: () => request<Stream[]>('GET', '/api/streams/feed'),
 
   get: (id: string) => request<Stream>('GET', `/api/streams/${id}`),
 

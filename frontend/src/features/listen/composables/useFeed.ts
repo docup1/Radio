@@ -9,7 +9,7 @@ export function useFeed() {
   async function load() {
     loading.value = true
     try {
-      streams.value = await streamApi.list()
+      streams.value = await streamApi.getFeed()
     } finally {
       loading.value = false
     }
