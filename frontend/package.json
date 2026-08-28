@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@primevue/themes": "^4.2.5",
+    "mux.js": "^6.3.0",
     "primeicons": "^7.0.0",
     "primevue": "^4.2.5",
     "sortablejs": "^1.15.2",

@@ -19,10 +19,6 @@ type HTTPConfig struct {
 	ReadHeaderTimeout time.Duration `yaml:"read_header_timeout"`
 }
 
-type GRPCConfig struct {
-	Addr string `yaml:"addr"`
-}
-
 type DBConfig struct {
 	Host            string        `yaml:"host"`
 	Port            int           `yaml:"port"`
@@ -55,20 +51,12 @@ type RedisConfig struct {
 Timeout time.Duration `yaml:"connect_timeout"`
 }
 
-type WorkerConfig struct {
-	OutboxBatchSize int           `yaml:"outbox_batch_size"`
-	OutboxInterval  time.Duration `yaml:"outbox_interval"`
-	WatchdogInterval time.Duration `yaml:"watchdog_interval"`
-}
-
 type Config struct {
 	Env                string        `yaml:"env"`
 	LogLevel           string        `yaml:"log_level"`
 	HTTP               HTTPConfig    `yaml:"http"`
-	GRPC               GRPCConfig    `yaml:"grpc"`
 	DB                 DBConfig      `yaml:"db"`
 	Redis              RedisConfig   `yaml:"redis"`
-	Worker             WorkerConfig  `yaml:"worker"`
 	Swagger            SwaggerConfig `yaml:"swagger"`
 	ContentServiceGRPC string        `yaml:"content_service_grpc"`
 
@@ -99,17 +87,6 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.Swagger.SpecFile = "docs/swagger.json"
 	}
 
-	// defaults
-	if cfg.Worker.OutboxBatchSize == 0 {
-		cfg.Worker.OutboxBatchSize = 100
-	}
-	if cfg.Worker.OutboxInterval == 0 {
-		cfg.Worker.OutboxInterval = 100 * time.Millisecond
-	}
-	if cfg.Worker.WatchdogInterval == 0 {
-		cfg.Worker.WatchdogInterval = 5 * time.Second
-	}
-
 	// env overrides
 	if v := os.Getenv("APP_ENV"); v != "" {
 		cfg.Env = v
@@ -136,9 +113,6 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if v := os.Getenv("HTTP_ADDR"); v != "" {
 		cfg.HTTP.Addr = v
-	}
-	if v := os.Getenv("GRPC_ADDR"); v != "" {
-		cfg.GRPC.Addr = v
 	}
 	if v := os.Getenv("REDIS_ADDR"); v != "" {
 		cfg.Redis.Addr = v

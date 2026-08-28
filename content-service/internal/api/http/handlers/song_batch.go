@@ -99,14 +99,14 @@ func SongAudio(svc *application.Services, files interfaces.FileOpener) http.Hand
 			}
 		}
 
-		// Set headers
+		// Set headers — do NOT pre-set Content-Length; http.ServeContent sets
+		// the correct value for both 200 (full) and 206 (range) responses.
 		w.Header().Set("Content-Type", melody.ContentType)
-		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 		w.Header().Set("Accept-Ranges", "bytes")
 		w.Header().Set("ETag", etag)
 		w.Header().Set("Cache-Control", "private, max-age=0, must-revalidate")
 
-		// Serve with Range support
+		// Serve with Range support — handles Range header, 206, 416, etc.
 		http.ServeContent(w, r, melody.Path, modTime, rc)
 	}
 }

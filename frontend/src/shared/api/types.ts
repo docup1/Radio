@@ -92,17 +92,15 @@ export interface Stream {
 }
 
 export interface StreamState {
-  stream_id: string
-  current_queue_id: string | null
-  song_id: string | null
-  started_at: string | null
   is_active: boolean
-  revision: number
+  current_item_id: string | null
+  current_song_id: string | null
+  position: number | null
+  queue_length: number
 }
 
 export interface QueueItem {
   id: string
-  stream_id: string
   song_id: string
   position: number
   song?: Song

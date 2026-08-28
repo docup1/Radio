@@ -20,11 +20,11 @@ import (
 //	@Router		/api/content/songs/{id} [get]
 //	@Router		/api/content/songs/{id}/audio [get]
 func (h *Handler) content(w http.ResponseWriter, r *http.Request) {
+	token := h.auth.ExtractToken(r)
+
 	// Never trust client-supplied identity headers.
 	r.Header.Del("X-Owner-ID")
 	r.Header.Del("Authorization")
-
-	token := h.auth.ExtractToken(r)
 	if token == "" {
 		infra.WriteError(w, http.StatusUnauthorized, "missing authentication")
 		return

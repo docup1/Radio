@@ -5,9 +5,6 @@ http:
   addr: ":8080"
   read_header_timeout: 5s
 
-grpc:
-  addr: ":8082"
-
 db:
   host: postgres
   port: 5432
@@ -26,11 +23,6 @@ redis:
   connect_timeout: 5s
 
 content_service_grpc: "content-service:8082"
-
-worker:
-  outbox_batch_size: 100
-  outbox_interval: 100ms
-  watchdog_interval: 5s
 
 swagger:
   enabled: false

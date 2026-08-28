@@ -39,12 +39,19 @@ export function useStreams() {
   }
 
   async function start(id: string) {
-    currentState.value = await streamApi.start(id)
+    await streamApi.start(id)
+    currentState.value = await streamApi.getState(id)
   }
 
   async function stop(id: string) {
-    currentState.value = await streamApi.stop(id)
+    await streamApi.stop(id)
+    currentState.value = await streamApi.getState(id)
   }
 
-  return { stream, currentState, loading, loadMine, get, update, remove, start, stop }
+  async function skip(id: string) {
+    await streamApi.skip(id)
+    currentState.value = await streamApi.getState(id)
+  }
+
+  return { stream, currentState, loading, loadMine, get, update, remove, start, stop, skip }
 }

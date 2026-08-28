@@ -6,97 +6,118 @@ import (
 	"log"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	"github.com/google/uuid"
 
-	"radio/sender-service/internal/domain/models"
+	"radio/sender-service/internal/infrastructure/redis"
 )
-
-const StreamEvents = "stream:events"
-const ConsumerGroup = "sender-service"
-
-type RedisSubscriber struct {
-	rdb *redis.Client
-}
-
-func NewRedisSubscriber(rdb *redis.Client) *RedisSubscriber {
-	// Ensure consumer group
-	_ = rdb.XGroupCreateMkStream(context.Background(), StreamEvents, ConsumerGroup, "0").Err()
-	return &RedisSubscriber{rdb: rdb}
-}
 
 type Worker struct {
 	svc *Service
-	sub *RedisSubscriber
+	rdb *redis.Client
 }
 
-func NewWorker(svc *Service, sub *RedisSubscriber) *Worker {
-	return &Worker{svc: svc, sub: sub}
+func NewWorker(svc *Service, rdb *redis.Client) *Worker {
+	return &Worker{svc: svc, rdb: rdb}
 }
 
 func (w *Worker) Run(ctx context.Context) {
-	consumer := "sender-worker"
+	go w.listenEvents(ctx)
+	<-ctx.Done()
+}
+
+func (w *Worker) listenEvents(ctx context.Context) {
+	w.recoverPending(ctx)
+
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		default:
-		}
-
-		res, err := w.sub.rdb.XReadGroup(ctx, &redis.XReadGroupArgs{
-			Group:    ConsumerGroup,
-			Consumer: consumer,
-			Streams:  []string{StreamEvents, ">"},
-			Count:    10,
-			Block:    1 * time.Second,
-		}).Result()
-		if err != nil {
-			if err == redis.Nil || ctx.Err() != nil {
-				continue
-			}
-			log.Printf("[worker] readgroup error: %v", err)
-			time.Sleep(500 * time.Millisecond)
-			continue
-		}
-
-		for _, stream := range res {
-			for _, msg := range stream.Messages {
-				dataStr, ok := msg.Values["data"].(string)
-				if !ok {
-					continue
-				}
-				var event models.StreamEvent
-				if err := json.Unmarshal([]byte(dataStr), &event); err != nil {
-					log.Printf("[worker] unmarshal: %v", err)
-					continue
-				}
-
-				w.handleEvent(ctx, event)
-			}
+		case <-ticker.C:
+			w.pollActiveStreams(ctx)
 		}
 	}
 }
 
-func (w *Worker) handleEvent(ctx context.Context, event models.StreamEvent) {
-	streamID := event.StreamID
+// recoverPending re-processes unacknowledged events from a previous run.
+func (w *Worker) recoverPending(ctx context.Context) {
+	activeStreams, err := w.rdb.GetActiveStreams(ctx)
+	if err != nil {
+		log.Printf("[worker] get active streams: %v", err)
+		return
+	}
 
-	switch event.Type {
-	case "STREAM_STARTED":
-		log.Printf("[worker] STREAM_STARTED stream=%s", streamID)
-		w.svc.StartStream(streamID)
+	for _, streamID := range activeStreams {
+		events, err := w.rdb.ReadPendingEvents(ctx, streamID)
+		if err != nil {
+			log.Printf("[worker] recover pending %s: %v", streamID, err)
+			continue
+		}
+		for _, evt := range events {
+			w.handleEvent(ctx, streamID, evt)
+		}
+	}
+}
 
-	case "STREAM_SONG_CHANGED":
-		log.Printf("[worker] STREAM_SONG_CHANGED stream=%s revision=%d", streamID, event.Revision)
-		w.svc.OnSongChanged(streamID)
+func (w *Worker) pollActiveStreams(ctx context.Context) {
+	activeStreams, err := w.rdb.GetActiveStreams(ctx)
+	if err != nil {
+		log.Printf("[worker] get active streams: %v", err)
+		return
+	}
 
-	case "STREAM_ENDED":
-		log.Printf("[worker] STREAM_ENDED stream=%s", streamID)
+	for _, streamID := range activeStreams {
+		if err := w.rdb.EnsureConsumerGroup(ctx, streamID); err != nil {
+			log.Printf("[worker] ensure group %s: %v", streamID, err)
+			continue
+		}
+		events, err := w.rdb.ReadEvents(ctx, streamID)
+		if err != nil {
+			log.Printf("[worker] read events %s: %v", streamID, err)
+			continue
+		}
+		for _, evt := range events {
+			w.handleEvent(ctx, streamID, evt)
+		}
+	}
+}
+
+type songPayload struct {
+	ItemID string `json:"item_id"`
+	SongID string `json:"song_id"`
+}
+
+func (w *Worker) handleEvent(ctx context.Context, streamID uuid.UUID, evt *redis.EventMessage) {
+	switch evt.Type {
+	case "stream_started", "song_changed":
+		var payload songPayload
+		if err := json.Unmarshal(evt.Payload, &payload); err != nil {
+			log.Printf("[worker] unmarshal %s: %v", evt.Type, err)
+			break
+		}
+		songID, err := uuid.Parse(payload.SongID)
+		if err != nil {
+			log.Printf("[worker] parse song_id %q: %v", payload.SongID, err)
+			break
+		}
+		log.Printf("[worker] %s stream=%s item=%s song=%s", evt.Type, streamID, payload.ItemID, songID)
+		w.svc.StartHeartbeat(streamID)
+		w.svc.OnSongChanged(streamID, songID)
+
+	case "stream_stopped":
+		log.Printf("[worker] stream_stopped stream=%s", streamID)
 		w.svc.StopStream(streamID)
 
-	case "QUEUE_UPDATED":
-		log.Printf("[worker] QUEUE_UPDATED stream=%s", streamID)
+	case "queue_updated":
+		log.Printf("[worker] queue_updated stream=%s", streamID)
 
 	default:
-		log.Printf("[worker] unknown event type: %s", event.Type)
+		log.Printf("[worker] ignoring event type=%s stream=%s", evt.Type, streamID)
+	}
+
+	if err := w.rdb.AckEvent(ctx, streamID, evt.ID); err != nil {
+		log.Printf("[worker] ack event %s: %v", evt.ID, err)
 	}
 }

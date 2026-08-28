@@ -2,8 +2,11 @@ package application
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -200,10 +203,27 @@ func (s *UploadService) Confirm(ctx context.Context, owner uuid.UUID, sessionID 
 		return &ConfirmResult{Image: &img}, nil
 	}
 
+	// Convert WAV to MP3 if needed
+	contentType := session.ContentType
+	if isWAV(contentType) {
+		mp3Path := finalPath + ".mp3"
+		if err := convertToMP3(finalPath, mp3Path); err == nil {
+			_ = removeFile(finalPath)
+			finalPath = mp3Path
+			contentType = "audio/mpeg"
+			hash, size, _ = s.Chunks.HashAndSize(finalPath)
+			_ = s.UploadSessions.Update(ctx, sessionID, interfaces.UploadSessionPatch{
+				FinalPath: &finalPath,
+				Size:      &size,
+				Hash:      &hash,
+			})
+		}
+	}
+
 	melody := models.Melody{
 		ID:          uuid.New(),
 		Path:        finalPath,
-		ContentType: session.ContentType,
+		ContentType: contentType,
 		Size:        size,
 		Hash:        hash,
 		CreatedAt:   time.Now(),
@@ -219,6 +239,19 @@ func (s *UploadService) Confirm(ctx context.Context, owner uuid.UUID, sessionID 
 func removeFile(path string) error {
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
+	}
+	return nil
+}
+
+func isWAV(ct string) bool {
+	ct = strings.ToLower(ct)
+	return ct == "audio/wav" || ct == "audio/x-wav"
+}
+
+func convertToMP3(input, output string) error {
+	cmd := exec.Command("ffmpeg", "-i", input, "-codec:a", "libmp3lame", "-b:a", "128k", "-y", output)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("ffmpeg: %w: %s", err, string(out))
 	}
 	return nil
 }

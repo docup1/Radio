@@ -4,19 +4,17 @@ import (
 	"context"
 	"flag"
 	"log"
-	"net"
 	"net/http"
 	"os/signal"
 	"syscall"
 	"time"
 
-	grpctransport "radio/stream-service/internal/api/grpc"
 	"radio/stream-service/internal/api/rest"
 	"radio/stream-service/internal/application"
 	"radio/stream-service/internal/infrastructure"
 	"radio/stream-service/internal/infrastructure/db"
 	contentgrpc "radio/stream-service/internal/infrastructure/grpc/content"
-	"radio/stream-service/internal/infrastructure/redis"
+	svcredis "radio/stream-service/internal/infrastructure/redis"
 )
 
 func main() {
@@ -34,13 +32,13 @@ func main() {
 	}
 	defer conn.Close()
 
-	rdb, err := redis.NewClient(cfg.Redis)
+	rdb, err := svcredis.NewClient(cfg.Redis)
 	if err != nil {
 		log.Fatalf("redis: %v", err)
 	}
 
-	pub := redis.NewPublisher(rdb)
-	sub := redis.NewSubscriber(rdb)
+	pub := svcredis.NewPublisher(rdb)
+	queueStore := svcredis.NewQueueStore(rdb)
 
 	checkCache := contentgrpc.NewCheckCache(5 * time.Minute)
 	contentClient, err := contentgrpc.NewContentClient(cfg.ContentServiceGRPC, checkCache)
@@ -51,50 +49,23 @@ func main() {
 
 	repos := application.Repos{
 		Streams:  &db.StreamRepository{DB: conn},
-		State:    &db.StreamStateRepository{DB: conn},
-		Queue:    &db.QueueRepository{DB: conn},
 		Hashtags: &db.HashtagRepository{DB: conn},
-		Outbox:   &db.OutboxRepository{DB: conn},
 	}
-	svc := application.New(repos, pub, contentClient)
-
-	worker := application.NewWorker(svc, pub, sub, application.WorkerConfig{
-		BatchSize:        cfg.Worker.OutboxBatchSize,
-		OutboxInterval:   cfg.Worker.OutboxInterval,
-		WatchdogInterval: cfg.Worker.WatchdogInterval,
-	})
+	svc := application.New(repos, queueStore, pub, contentClient, rdb)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	go worker.Run(ctx)
-
-	// HTTP server
 	srv := &http.Server{
 		Addr:              cfg.HTTP.Addr,
-		Handler:           rest.NewHandler(svc, worker),
+		Handler:           rest.NewHandler(svc),
 		ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
 	}
 
-	// gRPC server
-	grpcSrv := grpctransport.NewServer(svc)
-	grpcLis, err := net.Listen("tcp", cfg.GRPC.Addr)
-	if err != nil {
-		log.Fatalf("grpc listen %s: %v", cfg.GRPC.Addr, err)
-	}
-
-	errCh := make(chan error, 2)
-
+	errCh := make(chan error, 1)
 	go func() {
-		log.Printf("stream-service REST listening on %s", cfg.HTTP.Addr)
+		log.Printf("stream-service listening on %s", cfg.HTTP.Addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			errCh <- err
-		}
-	}()
-
-	go func() {
-		log.Printf("stream-service gRPC listening on %s", cfg.GRPC.Addr)
-		if err := grpcSrv.Serve(grpcLis); err != nil && err.Error() != "grpc: the server has been stopped" {
 			errCh <- err
 		}
 	}()
@@ -107,6 +78,5 @@ func main() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(shutdownCtx)
-		grpcSrv.GracefulStop()
 	}
 }

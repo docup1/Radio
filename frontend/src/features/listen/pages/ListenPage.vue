@@ -2,13 +2,13 @@
 import { ref, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { streamApi } from '@/shared/api/stream'
-import { useWebSocketPlayer } from '../composables/useWebSocketPlayer'
+import { useMSEPlayer } from '../composables/useMSEPlayer'
 import StreamPlayer from '../components/StreamPlayer.vue'
 import type { Stream } from '@/shared/api/types'
 
 const props = defineProps<{ id: string }>()
 const router = useRouter()
-const { state, connect, disconnect } = useWebSocketPlayer()
+const { state, connect, disconnect } = useMSEPlayer()
 
 const stream = ref<Stream | null>(null)
 const loaded = ref(false)

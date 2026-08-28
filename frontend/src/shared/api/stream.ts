@@ -20,9 +20,11 @@ export const streamApi = {
 
   getState: (id: string) => request<StreamState>('GET', `/api/streams/${id}/state`),
 
-  start: (id: string) => request<StreamState>('POST', `/api/streams/${id}/start`),
+  start: (id: string) => request<void>('POST', `/api/streams/${id}/start`),
 
-  stop: (id: string) => request<StreamState>('POST', `/api/streams/${id}/stop`),
+  stop: (id: string) => request<void>('POST', `/api/streams/${id}/stop`),
+
+  skip: (id: string) => request<void>('POST', `/api/streams/${id}/skip`),
 
   listQueue: (id: string) => request<QueueItem[]>('GET', `/api/streams/${id}/queue`),
 

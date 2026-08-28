@@ -1,6 +1,6 @@
 databaseChangeLog:
   - changeSet:
-      id: 001-create-streams-table
+      id: 001-baseline-streams
       author: radio
       changes:
         - createTable:
@@ -11,7 +11,6 @@ databaseChangeLog:
                   type: uuid
                   constraints:
                     primaryKey: true
-                    nullable: false
                     nullable: false
               - column:
                   name: name
@@ -41,121 +40,7 @@ databaseChangeLog:
                   defaultValueComputed: now()
                   constraints:
                     nullable: false
-      rollback:
-        - dropTable:
-            tableName: streams
 
-  - changeSet:
-      id: 002-create-stream-queue-table
-      author: radio
-      changes:
-        - createTable:
-            tableName: stream_queue
-            columns:
-              - column:
-                  name: id
-                  type: uuid
-                  constraints:
-                    primaryKey: true
-                    nullable: false
-              - column:
-                  name: stream_id
-                  type: uuid
-                  constraints:
-                    nullable: false
-                    foreignKeyName: fk_stream_queue_stream_id
-                    references: streams(id)
-                    deleteCascade: true
-              - column:
-                  name: song_id
-                  type: uuid
-                  constraints:
-                    nullable: false
-              - column:
-                  name: position
-                  type: bigint
-                  constraints:
-                    nullable: false
-              - column:
-                  name: created_at
-                  type: timestamptz
-                  defaultValueComputed: now()
-                  constraints:
-                    nullable: false
-        - createIndex:
-            indexName: idx_stream_queue_stream_id
-            tableName: stream_queue
-            columns:
-              - column:
-                  name: stream_id
-        - createIndex:
-            indexName: uq_stream_queue_stream_position
-            tableName: stream_queue
-            unique: true
-            columns:
-              - column:
-                  name: stream_id
-              - column:
-                  name: position
-      rollback:
-        - dropTable:
-            tableName: stream_queue
-
-  - changeSet:
-      id: 003-create-stream-state-table
-      author: radio
-      changes:
-        - createTable:
-            tableName: stream_state
-            columns:
-              - column:
-                  name: stream_id
-                  type: uuid
-                  constraints:
-                    primaryKey: true
-                    nullable: false
-                    foreignKeyName: fk_stream_state_stream_id
-                    references: streams(id)
-                    deleteCascade: true
-              - column:
-                  name: current_queue_id
-                  type: uuid
-                  constraints:
-                    nullable: true
-                    foreignKeyName: fk_stream_state_current_queue_id
-                    references: stream_queue(id)
-                    deleteSetNull: true
-              - column:
-                  name: started_at
-                  type: timestamptz
-                  constraints:
-                    nullable: true
-              - column:
-                  name: is_active
-                  type: boolean
-                  defaultValueBoolean: false
-                  constraints:
-                    nullable: false
-              - column:
-                  name: revision
-                  type: bigint
-                  defaultValueNumeric: 0
-                  constraints:
-                    nullable: false
-              - column:
-                  name: updated_at
-                  type: timestamptz
-                  defaultValueComputed: now()
-                  constraints:
-                    nullable: false
-      rollback:
-        - dropTable:
-            tableName: stream_state
-
-  - changeSet:
-      id: 004-create-hashtags-table
-      author: radio
-      changes:
         - createTable:
             tableName: hashtags
             columns:
@@ -170,9 +55,6 @@ databaseChangeLog:
                   type: uuid
                   constraints:
                     nullable: false
-                    foreignKeyName: fk_hashtags_stream_id
-                    references: streams(id)
-                    deleteCascade: true
               - column:
                   name: name
                   type: varchar(64)
@@ -184,6 +66,15 @@ databaseChangeLog:
                   defaultValueComputed: now()
                   constraints:
                     nullable: false
+
+        - addForeignKeyConstraint:
+            baseTableName: hashtags
+            baseColumnNames: stream_id
+            constraintName: fk_hashtags_stream_id
+            referencedTableName: streams
+            referencedColumnNames: id
+            onDelete: CASCADE
+
         - createIndex:
             indexName: idx_hashtags_stream_id
             tableName: hashtags
@@ -199,66 +90,9 @@ databaseChangeLog:
                   name: stream_id
               - column:
                   name: name
+
       rollback:
         - dropTable:
             tableName: hashtags
-
-  - changeSet:
-      id: 005-create-outbox-table
-      author: radio
-      changes:
-        - createTable:
-            tableName: outbox
-            columns:
-              - column:
-                  name: id
-                  type: uuid
-                  constraints:
-                    primaryKey: true
-                    nullable: false
-              - column:
-                  name: aggregate_type
-                  type: varchar(64)
-                  constraints:
-                    nullable: false
-              - column:
-                  name: aggregate_id
-                  type: uuid
-                  constraints:
-                    nullable: false
-              - column:
-                  name: event_type
-                  type: varchar(64)
-                  constraints:
-                    nullable: false
-              - column:
-                  name: payload
-                  type: jsonb
-                  constraints:
-                    nullable: false
-              - column:
-                  name: created_at
-                  type: timestamptz
-                  defaultValueComputed: now()
-                  constraints:
-                    nullable: false
-              - column:
-                  name: processed_at
-                  type: timestamptz
-                  constraints:
-                    nullable: true
-        - createIndex:
-            indexName: idx_outbox_processed_at
-            tableName: outbox
-            columns:
-              - column:
-                  name: processed_at
-        - createIndex:
-            indexName: idx_outbox_aggregate_id
-            tableName: outbox
-            columns:
-              - column:
-                  name: aggregate_id
-      rollback:
         - dropTable:
-            tableName: outbox
+            tableName: streams

@@ -29,6 +29,13 @@ func NewHandler(hub *application.Hub, svc *application.Service) *Handler {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/health" || r.URL.Path == "/" {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+		return
+	}
+
 	// Parse stream ID from path: /stream/{id}
 	path := strings.TrimPrefix(r.URL.Path, "/stream/")
 	if path == "" || path == r.URL.Path {
@@ -42,15 +49,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if stream hub exists, auto-start if not
+	// Check if stream hub exists — only active streams are allowed
 	sh := h.hub.Get(streamID)
 	if sh == nil {
-		h.svc.StartStream(streamID)
-		sh = h.hub.Get(streamID)
-		if sh == nil {
-			http.Error(w, "stream not active", http.StatusNotFound)
-			return
-		}
+		http.Error(w, "stream not active", http.StatusNotFound)
+		return
 	}
 
 	// Upgrade to WebSocket
@@ -62,9 +65,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	listenerID := atomic.AddInt64(&listenerCounter, 1)
 	l := &application.Listener{
-		ID:  strconv.FormatInt(listenerID, 10),
-		Ch:  make(chan []byte, 100),
-		Hub: sh,
+		ID:        strconv.FormatInt(listenerID, 10),
+		Ch:        make(chan []byte, 100),
+		ControlCh: make(chan string, 10),
+		Hub:       sh,
 	}
 
 	sh.Subscribe(l)
@@ -86,12 +90,26 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// Write loop
+	// Write loop: multiplex binary chunks and text control messages
 	go func() {
-		for chunk := range l.Ch {
-			if err := conn.WriteMessage(websocket.BinaryMessage, chunk); err != nil {
-				log.Printf("[ws] write error: %v", err)
-				return
+		for {
+			select {
+			case chunk, ok := <-l.Ch:
+				if !ok {
+					return
+				}
+				if err := conn.WriteMessage(websocket.BinaryMessage, chunk); err != nil {
+					log.Printf("[ws] write error: %v", err)
+					return
+				}
+			case msg, ok := <-l.ControlCh:
+				if !ok {
+					return
+				}
+				if err := conn.WriteMessage(websocket.TextMessage, []byte(msg)); err != nil {
+					log.Printf("[ws] write error: %v", err)
+					return
+				}
 			}
 		}
 	}()

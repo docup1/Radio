@@ -3,6 +3,7 @@ package api
 import (
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"radio/gateway/api/content"
@@ -14,6 +15,12 @@ import (
 // NewRouter builds the gateway mux: health, user routes, content routes, and (in dev)
 // Swagger. Auth cookie handling is wired into the user-service proxy via
 // ModifyResponse. The gateway holds no JWT secret.
+//
+// Routing:
+//   - /api/streams/{id}/ws        → sender-service (WebSocket)
+//   - /api/streams/... (остальное) → stream-service (control plane)
+//   - /api/auth/*                 → user-service
+//   - /api/content/*              → content-service
 func NewRouter(cfg *infra.Config) http.Handler {
 	client := &http.Client{Timeout: 30 * time.Second}
 	authSvc := infra.NewAuthService(client, cfg.Upstreams.UserService, cfg.Cookie, cfg.Env)
@@ -44,14 +51,17 @@ func NewRouter(cfg *infra.Config) http.Handler {
 	if cfg.Upstreams.StreamService != "" {
 		streamProxy := infra.NewProxy(cfg.Upstreams.StreamService, "/api")
 		var wsProxy *infra.WSProxy
+		var senderProxy *infra.SenderProxy
 		if cfg.Upstreams.SenderService != "" {
 			var err error
 			wsProxy, err = infra.NewWSProxy(cfg.Upstreams.SenderService)
 			if err != nil {
 				log.Printf("warn: sender_service WS proxy disabled: %v", err)
 			}
+			senderHTTP := strings.Replace(cfg.Upstreams.SenderService, "ws://", "http://", 1)
+			senderProxy = infra.NewSenderProxy(senderHTTP)
 		}
-		stream.Register(mux, stream.New(streamProxy, authSvc, wsProxy))
+		stream.Register(mux, stream.New(streamProxy, authSvc, wsProxy, senderProxy))
 	}
 
 	infra.Mount(mux, cfg)

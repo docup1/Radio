@@ -6,7 +6,8 @@ GATEWAY_DIST := gateway/dist
 .PHONY: dev prod build down clean \
          front-install front-dev front-build front-dist \
          user-dev cs-build cs-dev cs-down \
-         ss-build ss-dev snd-build snd-dev
+         ss-build ss-dev snd-build snd-dev \
+         gw-build
 
 # ---------- frontend ----------
 front-install:
@@ -73,11 +74,18 @@ snd-build:
 snd-dev: snd-build
 	docker compose up -d --build --force-recreate sender-service
 
+# ---------- gateway ----------
+gw-build:
+	@echo "building gateway linux/$(GOARCH)"
+	cd gateway && go install github.com/swaggo/swag/cmd/swag@v1.16.4 && \
+		swag init -g api/router.go -o docs --parseInternal --ot json,yaml
+	cd gateway && CGO_ENABLED=0 GOOS=linux GOARCH=$(GOARCH) go build -ldflags="-s -w" -o bin/gateway .
+
 # ---------- full stack ----------
 dev:
 	sh $(CURDIR)/scripts/dev.sh
 
-prod: build cs-build ss-build snd-build front-dist
+prod: build cs-build ss-build snd-build gw-build front-dist
 	docker compose build
 	docker compose up -d
 
@@ -85,4 +93,4 @@ down:
 	docker compose down
 
 clean:
-	rm -rf user-service/bin content-service/bin stream-service/bin sender-service/bin
+	rm -rf user-service/bin content-service/bin stream-service/bin sender-service/bin gateway/bin

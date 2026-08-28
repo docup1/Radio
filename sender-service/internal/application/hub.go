@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"sync"
 
@@ -16,13 +17,22 @@ type Hub struct {
 
 type StreamHub struct {
 	StreamID  uuid.UUID
-	Revision  int64
 	SongID    uuid.UUID
 	StartedAt int64 // unix nanos
 
 	// Audio buffer: last N chunks
 	Chunks [][]byte
 	MaxCap int
+
+	// Playback tracking
+	FileSize  int64
+	BytesSent int64
+
+	// Next-song prefetch buffer
+	NextSongID   uuid.UUID
+	NextChunks   [][]byte
+	NextFileSize int64
+	prefetchSent bool // true once control msg for next song was sent
 
 	// WebSocket listeners
 	Listeners map[*Listener]struct{}
@@ -32,10 +42,11 @@ type StreamHub struct {
 }
 
 type Listener struct {
-	ID   string
-	Ch   chan []byte
-	Hub  *StreamHub
-	Once bool // sent initial state
+	ID        string
+	Ch        chan []byte
+	ControlCh chan string
+	Hub       *StreamHub
+	Once      bool // sent initial state
 }
 
 func NewHub() *Hub {
@@ -77,7 +88,6 @@ func (h *Hub) Remove(streamID uuid.UUID) {
 		return
 	}
 
-	// Close all listeners
 	sh.mu.Lock()
 	for l := range sh.Listeners {
 		close(l.Ch)
@@ -100,24 +110,22 @@ func (sh *StreamHub) AddChunk(data []byte) {
 		sh.Chunks = sh.Chunks[1:]
 	}
 
-	// Broadcast to all listeners
 	for l := range sh.Listeners {
 		select {
 		case l.Ch <- data:
 		default:
-			// Listener too slow, drop
 			log.Printf("[hub] dropping chunk for listener %s (slow)", l.ID)
 		}
 	}
 }
 
-func (sh *StreamHub) UpdateState(songID uuid.UUID, revision int64, startedAt int64) {
+func (sh *StreamHub) UpdateState(songID uuid.UUID, startedAt int64) {
 	sh.mu.Lock()
 	defer sh.mu.Unlock()
 	sh.SongID = songID
-	sh.Revision = revision
 	sh.StartedAt = startedAt
-	// Clear buffer on song change
+	sh.FileSize = 0
+	sh.BytesSent = 0
 	sh.Chunks = sh.Chunks[:0]
 }
 
@@ -126,11 +134,19 @@ func (sh *StreamHub) Subscribe(l *Listener) {
 	defer sh.mu.Unlock()
 	sh.Listeners[l] = struct{}{}
 
-	// Send latest chunk to new listener
 	if len(sh.Chunks) > 0 {
 		latest := sh.Chunks[len(sh.Chunks)-1]
 		select {
 		case l.Ch <- latest:
+		default:
+		}
+	}
+
+	// Tell new listeners which song is currently playing
+	if sh.SongID != uuid.Nil {
+		ctrl, _ := json.Marshal(map[string]string{"type": "song", "songId": sh.SongID.String()})
+		select {
+		case l.ControlCh <- string(ctrl):
 		default:
 		}
 	}
@@ -142,14 +158,12 @@ func (sh *StreamHub) Unsubscribe(l *Listener) {
 	delete(sh.Listeners, l)
 }
 
-// SetCancel stores the cancel function for the current serveStream goroutine.
 func (sh *StreamHub) SetCancel(cancel context.CancelFunc) {
 	sh.mu.Lock()
 	defer sh.mu.Unlock()
 	sh.cancel = cancel
 }
 
-// Cancel stops the current serveStream goroutine.
 func (sh *StreamHub) Cancel() {
 	sh.mu.RLock()
 	cancel := sh.cancel
@@ -157,4 +171,70 @@ func (sh *StreamHub) Cancel() {
 	if cancel != nil {
 		cancel()
 	}
+}
+
+func (sh *StreamHub) RLock() {
+	sh.mu.RLock()
+}
+
+func (sh *StreamHub) RUnlock() {
+	sh.mu.RUnlock()
+}
+
+func (sh *StreamHub) Lock() {
+	sh.mu.Lock()
+}
+
+func (sh *StreamHub) Unlock() {
+	sh.mu.Unlock()
+}
+
+func (sh *StreamHub) SendControl(data []byte) {
+	sh.mu.RLock()
+	defer sh.mu.RUnlock()
+	msg := string(data)
+	for l := range sh.Listeners {
+		select {
+		case l.ControlCh <- msg:
+		default:
+		}
+	}
+}
+
+// SetNextPrefetch stores pre-fetched chunks for the next song.
+func (sh *StreamHub) SetNextPrefetch(songID uuid.UUID, chunks [][]byte, fileSize int64) {
+	sh.mu.Lock()
+	defer sh.mu.Unlock()
+	sh.NextSongID = songID
+	sh.NextChunks = chunks
+	sh.NextFileSize = fileSize
+	sh.prefetchSent = false
+}
+
+// TakeNextPrefetch returns and clears the pre-fetched next-song data.
+// Returns ok=false if nothing was prefetched.
+func (sh *StreamHub) TakeNextPrefetch() (uuid.UUID, [][]byte, int64, bool) {
+	sh.mu.Lock()
+	defer sh.mu.Unlock()
+	if sh.NextSongID == uuid.Nil || len(sh.NextChunks) == 0 {
+		return uuid.Nil, nil, 0, false
+	}
+	songID := sh.NextSongID
+	chunks := sh.NextChunks
+	fileSize := sh.NextFileSize
+	sh.NextSongID = uuid.Nil
+	sh.NextChunks = nil
+	sh.NextFileSize = 0
+	sh.prefetchSent = false
+	return songID, chunks, fileSize, true
+}
+
+// ClearNextPrefetch discards any prefetched next-song data.
+func (sh *StreamHub) ClearNextPrefetch() {
+	sh.mu.Lock()
+	defer sh.mu.Unlock()
+	sh.NextSongID = uuid.Nil
+	sh.NextChunks = nil
+	sh.NextFileSize = 0
+	sh.prefetchSent = false
 }

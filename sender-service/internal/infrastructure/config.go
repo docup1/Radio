@@ -1,7 +1,6 @@
 package infrastructure
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -10,28 +9,22 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var ErrMissingDBPassword = errors.New("DB_PASSWORD is required")
-
 type HTTPConfig struct {
 	Addr              string        `yaml:"addr"`
 	ReadHeaderTimeout time.Duration `yaml:"read_header_timeout"`
-}
-
-type RedisConfig struct {
-	Addr     string `yaml:"addr"`
-	Password string `yaml:"password"`
-	DB       int    `yaml:"db"`
 }
 
 type Config struct {
 	Env               string     `yaml:"env"`
 	LogLevel          string     `yaml:"log_level"`
 	HTTP              HTTPConfig `yaml:"http"`
-	Redis             RedisConfig `yaml:"redis"`
-	StreamServiceGRPC string     `yaml:"stream_service_grpc"`
+	Redis             string     `yaml:"redis"`
 	ContentServiceURL string     `yaml:"content_service_url"`
 	ChunkSize         int64      `yaml:"chunk_size"`
+	Bitrate           int64      `yaml:"bitrate"`
 	BufferSeconds     int        `yaml:"buffer_seconds"`
+	PrefetchCount     int        `yaml:"prefetch_count"`
+	NextSongPrefetch  int        `yaml:"next_song_prefetch"`
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -53,10 +46,22 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.HTTP.ReadHeaderTimeout = 5 * time.Second
 	}
 	if cfg.ChunkSize == 0 {
-		cfg.ChunkSize = 65536 // 64KB
+		cfg.ChunkSize = 65536
+	}
+	if cfg.Bitrate == 0 {
+		cfg.Bitrate = 128000
 	}
 	if cfg.BufferSeconds == 0 {
 		cfg.BufferSeconds = 5
+	}
+	if cfg.PrefetchCount == 0 {
+		cfg.PrefetchCount = 8
+	}
+	if cfg.NextSongPrefetch == 0 {
+		cfg.NextSongPrefetch = 1
+	}
+	if cfg.Redis == "" {
+		cfg.Redis = "redis:6379"
 	}
 
 	// env overrides
@@ -67,10 +72,7 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.HTTP.Addr = v
 	}
 	if v := os.Getenv("REDIS_ADDR"); v != "" {
-		cfg.Redis.Addr = v
-	}
-	if v := os.Getenv("STREAM_SERVICE_GRPC"); v != "" {
-		cfg.StreamServiceGRPC = v
+		cfg.Redis = v
 	}
 	if v := os.Getenv("CONTENT_SERVICE_URL"); v != "" {
 		cfg.ContentServiceURL = v
@@ -80,9 +82,24 @@ func LoadConfig(path string) (*Config, error) {
 			cfg.ChunkSize = n
 		}
 	}
+	if v := os.Getenv("BITRATE"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			cfg.Bitrate = n
+		}
+	}
 	if v := os.Getenv("BUFFER_SECONDS"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.BufferSeconds = n
+		}
+	}
+	if v := os.Getenv("PREFETCH_COUNT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.PrefetchCount = n
+		}
+	}
+	if v := os.Getenv("NEXT_SONG_PREFETCH"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.NextSongPrefetch = n
 		}
 	}
 

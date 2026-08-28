@@ -1,4 +1,5 @@
 FROM alpine:3.20
+RUN apk add --no-cache ffmpeg
 RUN adduser -D -u 10001 app
 RUN mkdir -p /data/chunks /data/media && chown -R app:app /data
 USER app

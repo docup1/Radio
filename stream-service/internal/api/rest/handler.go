@@ -12,8 +12,7 @@ import (
 )
 
 type Handler struct {
-	svc    *application.Service
-	worker *application.Worker
+	svc *application.Service
 }
 
 func (h *Handler) healthz(w http.ResponseWriter, r *http.Request) {
@@ -21,8 +20,8 @@ func (h *Handler) healthz(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(`{"status":"ok"}`))
 }
 
-func NewHandler(svc *application.Service, worker *application.Worker) http.Handler {
-	h := &Handler{svc: svc, worker: worker}
+func NewHandler(svc *application.Service) http.Handler {
+	h := &Handler{svc: svc}
 
 	mux := http.NewServeMux()
 
@@ -37,10 +36,12 @@ func NewHandler(svc *application.Service, worker *application.Worker) http.Handl
 	mux.HandleFunc("PUT /streams/{id}", h.updateStream)
 	mux.HandleFunc("DELETE /streams/{id}", h.deleteStream)
 
-	// Stream state
-	mux.HandleFunc("GET /streams/{id}/state", h.getState)
+	// Playback control
 	mux.HandleFunc("POST /streams/{id}/start", h.startStream)
 	mux.HandleFunc("POST /streams/{id}/stop", h.stopStream)
+
+	// Stream status
+	mux.HandleFunc("GET /streams/{id}/state", h.getState)
 
 	// Queue
 	mux.HandleFunc("GET /streams/{id}/queue", h.listQueue)
@@ -52,9 +53,6 @@ func NewHandler(svc *application.Service, worker *application.Worker) http.Handl
 	mux.HandleFunc("GET /streams/{id}/hashtags", h.listHashtags)
 	mux.HandleFunc("POST /streams/{id}/hashtags", h.addHashtag)
 	mux.HandleFunc("DELETE /streams/{id}/hashtags/{hashtagId}", h.removeHashtag)
-
-	// Internal (for sender)
-	mux.HandleFunc("POST /internal/streams/{id}/advance", h.internalAdvance)
 
 	return mux
 }
@@ -90,15 +88,15 @@ func (h *Handler) getUserStream(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) feed(w http.ResponseWriter, r *http.Request) {
-	states, err := h.svc.ListActiveStreams(r.Context())
+	streamIDs, err := h.svc.ListActiveStreams(r.Context())
 	if err != nil {
 		WriteServiceError(w, err)
 		return
 	}
 
-	result := make([]dto.StreamResponse, 0, len(states))
-	for _, st := range states {
-		stream, err := h.svc.GetStream(r.Context(), st.StreamID)
+	result := make([]dto.StreamResponse, 0, len(streamIDs))
+	for _, streamID := range streamIDs {
+		stream, err := h.svc.GetStream(r.Context(), streamID)
 		if err != nil {
 			continue
 		}
@@ -201,33 +199,6 @@ func (h *Handler) deleteStream(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *Handler) getState(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(r.PathValue("id"))
-	if err != nil {
-		WriteError(w, http.StatusBadRequest, "invalid id")
-		return
-	}
-
-	st, err := h.svc.GetState(r.Context(), id)
-	if err != nil {
-		WriteServiceError(w, err)
-		return
-	}
-
-	resp := dto.StreamStateResponse{
-		StreamID:       st.StreamID,
-		CurrentQueueID: st.CurrentQueueID,
-		IsActive:       st.IsActive,
-		Revision:       st.Revision,
-		UpdatedAt:      st.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-	}
-	if st.StartedAt != nil {
-		s := st.StartedAt.Format("2006-01-02T15:04:05Z07:00")
-		resp.StartedAt = &s
-	}
-	WriteJSON(w, http.StatusOK, resp)
-}
-
 func (h *Handler) startStream(w http.ResponseWriter, r *http.Request) {
 	ownerID, ok := ownerOrError(w, r)
 	if !ok {
@@ -247,25 +218,11 @@ func (h *Handler) startStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	st, err := h.svc.StartStream(r.Context(), id)
-	if err != nil {
+	if err := h.svc.Start(r.Context(), id); err != nil {
 		WriteServiceError(w, err)
 		return
 	}
-	h.worker.Signal()
-
-	resp := dto.StreamStateResponse{
-		StreamID:       st.StreamID,
-		CurrentQueueID: st.CurrentQueueID,
-		IsActive:       st.IsActive,
-		Revision:       st.Revision,
-		UpdatedAt:      st.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-	}
-	if st.StartedAt != nil {
-		s := st.StartedAt.Format("2006-01-02T15:04:05Z07:00")
-		resp.StartedAt = &s
-	}
-	WriteJSON(w, http.StatusOK, resp)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) stopStream(w http.ResponseWriter, r *http.Request) {
@@ -283,25 +240,33 @@ func (h *Handler) stopStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, ok := h.ensureStream(w, r, ownerID); !ok {
+	if err := h.svc.Stop(r.Context(), id); err != nil {
+		WriteServiceError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) getState(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "invalid id")
 		return
 	}
 
-	st, err := h.svc.StopStream(r.Context(), id)
+	st, err := h.svc.GetStatus(r.Context(), id)
 	if err != nil {
 		WriteServiceError(w, err)
 		return
 	}
-	h.worker.Signal()
 
-	resp := dto.StreamStateResponse{
-		StreamID:       st.StreamID,
-		CurrentQueueID: st.CurrentQueueID,
-		IsActive:       st.IsActive,
-		Revision:       st.Revision,
-		UpdatedAt:      st.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-	}
-	WriteJSON(w, http.StatusOK, resp)
+	WriteJSON(w, http.StatusOK, dto.StreamStatusResponse{
+		IsActive:      st.IsActive,
+		CurrentItemID: st.CurrentItemID,
+		CurrentSongID: st.CurrentSongID,
+		Position:      st.Position,
+		QueueLength:   st.QueueLength,
+	})
 }
 
 func (h *Handler) listQueue(w http.ResponseWriter, r *http.Request) {
@@ -320,11 +285,9 @@ func (h *Handler) listQueue(w http.ResponseWriter, r *http.Request) {
 	resp := make([]dto.QueueItemResponse, len(items))
 	for i, item := range items {
 		resp[i] = dto.QueueItemResponse{
-			ID:        item.ID,
-			StreamID:  item.StreamID,
-			SongID:    item.SongID,
-			Position:  item.Position,
-			CreatedAt: item.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			ID:       item.ID,
+			SongID:   item.SongID,
+			Position: item.Position,
 		}
 	}
 	WriteJSON(w, http.StatusOK, resp)
@@ -360,14 +323,11 @@ func (h *Handler) addToQueue(w http.ResponseWriter, r *http.Request) {
 		WriteServiceError(w, err)
 		return
 	}
-	h.worker.Signal()
 
 	WriteJSON(w, http.StatusCreated, dto.QueueItemResponse{
-		ID:        item.ID,
-		StreamID:  item.StreamID,
-		SongID:    item.SongID,
-		Position:  item.Position,
-		CreatedAt: item.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		ID:       item.ID,
+		SongID:   item.SongID,
+		Position: item.Position,
 	})
 }
 
@@ -400,7 +360,6 @@ func (h *Handler) removeFromQueue(w http.ResponseWriter, r *http.Request) {
 		WriteServiceError(w, err)
 		return
 	}
-	h.worker.Signal()
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -440,7 +399,6 @@ func (h *Handler) moveQueueItem(w http.ResponseWriter, r *http.Request) {
 		WriteServiceError(w, err)
 		return
 	}
-	h.worker.Signal()
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -459,12 +417,12 @@ func (h *Handler) listHashtags(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := make([]dto.HashtagResponse, len(hashtagList))
-	for i, h := range hashtagList {
+	for i, hashtag := range hashtagList {
 		resp[i] = dto.HashtagResponse{
-			ID:        h.ID,
-			StreamID:  h.StreamID,
-			Name:      h.Name,
-			CreatedAt: h.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			ID:        hashtag.ID,
+			StreamID:  hashtag.StreamID,
+			Name:      hashtag.Name,
+			CreatedAt: hashtag.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		}
 	}
 	WriteJSON(w, http.StatusOK, resp)
@@ -540,32 +498,4 @@ func (h *Handler) removeHashtag(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func (h *Handler) internalAdvance(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(r.PathValue("id"))
-	if err != nil {
-		WriteError(w, http.StatusBadRequest, "invalid id")
-		return
-	}
-
-	st, err := h.svc.AdvanceSong(r.Context(), id)
-	if err != nil {
-		WriteServiceError(w, err)
-		return
-	}
-	h.worker.Signal()
-
-	resp := dto.StreamStateResponse{
-		StreamID:       st.StreamID,
-		CurrentQueueID: st.CurrentQueueID,
-		IsActive:       st.IsActive,
-		Revision:       st.Revision,
-		UpdatedAt:      st.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-	}
-	if st.StartedAt != nil {
-		s := st.StartedAt.Format("2006-01-02T15:04:05Z07:00")
-		resp.StartedAt = &s
-	}
-	WriteJSON(w, http.StatusOK, resp)
 }

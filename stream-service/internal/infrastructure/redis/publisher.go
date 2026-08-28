@@ -8,35 +8,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
-
-	"radio/stream-service/internal/infrastructure"
 )
 
-const (
-	StreamEvents       = "stream:events"
-	StreamSenderEvents = "stream:sender:events"
-	ConsumerGroup      = "stream-service"
-)
-
-func NewClient(cfg infrastructure.RedisConfig) (*redis.Client, error) {
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     cfg.Addr,
-		Password: cfg.Password,
-		DB:       cfg.DB,
-	})
-	ctx := context.Background()
-	if err := rdb.Ping(ctx).Err(); err != nil {
-		return nil, fmt.Errorf("redis ping: %w", err)
-	}
-
-	// Ensure consumer group for stream:events
-	err := rdb.XGroupCreateMkStream(ctx, StreamEvents, ConsumerGroup, "0").Err()
-	if err != nil && err.Error() != "BUSYGROUP Consumer Group name already exists" {
-		return nil, fmt.Errorf("xgroup create %s: %w", StreamEvents, err)
-	}
-
-	return rdb, nil
-}
+// EventMaxLen caps the per-stream events Redis Stream to avoid unbounded growth.
+const EventMaxLen = 1000
 
 type Publisher struct {
 	rdb *redis.Client
@@ -46,30 +21,55 @@ func NewPublisher(rdb *redis.Client) *Publisher {
 	return &Publisher{rdb: rdb}
 }
 
-type StreamEvent struct {
-	Type     string      `json:"type"`
-	StreamID uuid.UUID   `json:"stream_id"`
-	Revision int64       `json:"revision"`
-	Payload  interface{} `json:"payload,omitempty"`
+// streamEvent is the envelope written to stream:{id}:events.
+type streamEvent struct {
+	Type    string      `json:"type"`
+	Payload interface{} `json:"payload,omitempty"`
 }
 
-func (p *Publisher) Publish(ctx context.Context, event StreamEvent) error {
-	data, err := json.Marshal(event)
+func (p *Publisher) PublishEvent(ctx context.Context, streamID uuid.UUID, eventType string, payload interface{}) error {
+	key := fmt.Sprintf("stream:%s:events", streamID)
+	data, err := json.Marshal(streamEvent{Type: eventType, Payload: payload})
 	if err != nil {
 		return err
 	}
 
 	id, err := p.rdb.XAdd(ctx, &redis.XAddArgs{
-		Stream: StreamEvents,
+		Stream: key,
+		MaxLen: EventMaxLen,
+		Approx: true,
 		Values: map[string]interface{}{
-			"type":   event.Type,
-			"stream": event.StreamID.String(),
-			"data":   string(data),
+			"data": string(data),
 		},
 	}).Result()
 	if err != nil {
-		return fmt.Errorf("xadd %s: %w", StreamEvents, err)
+		return fmt.Errorf("xadd %s: %w", key, err)
 	}
-	log.Printf("[redis] published %s to %s (id=%s)", event.Type, StreamEvents, id)
+	log.Printf("[redis] published %s to %s (id=%s)", eventType, key, id)
 	return nil
+}
+
+type songPayload struct {
+	ItemID string `json:"item_id"`
+	SongID string `json:"song_id"`
+}
+
+// PublishStreamStarted signals the sender to begin serving the first song.
+func (p *Publisher) PublishStreamStarted(ctx context.Context, streamID, itemID, songID uuid.UUID) error {
+	return p.PublishEvent(ctx, streamID, "stream_started", songPayload{itemID.String(), songID.String()})
+}
+
+// PublishSongChanged signals the sender to switch to another song (e.g. after skip).
+func (p *Publisher) PublishSongChanged(ctx context.Context, streamID, itemID, songID uuid.UUID) error {
+	return p.PublishEvent(ctx, streamID, "song_changed", songPayload{itemID.String(), songID.String()})
+}
+
+// PublishStreamStopped signals the sender to tear the stream down.
+func (p *Publisher) PublishStreamStopped(ctx context.Context, streamID uuid.UUID) error {
+	return p.PublishEvent(ctx, streamID, "stream_stopped", nil)
+}
+
+// PublishQueueUpdated notifies about queue mutations while active.
+func (p *Publisher) PublishQueueUpdated(ctx context.Context, streamID uuid.UUID) error {
+	return p.PublishEvent(ctx, streamID, "queue_updated", nil)
 }

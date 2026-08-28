@@ -9,7 +9,7 @@ import type { QueueItem } from '@/shared/api/types'
 const props = defineProps<{ id: string }>()
 const router = useRouter()
 
-const { stream: current, currentState, get, start, stop, update } = useStreams()
+const { stream: current, currentState, get, start, stop, skip, update } = useStreams()
 const { queue, load: loadQueue, add, remove, reorder } = useStreamQueue(props.id)
 const { songs, query, loading: songsLoading, load: loadSongs, setQuery } = useSongs()
 
@@ -64,6 +64,10 @@ async function onStart() {
 async function onStop() {
   await stop(props.id)
 }
+
+async function onSkip() {
+  await skip(props.id)
+}
 </script>
 
 <template>
@@ -78,7 +82,10 @@ async function onStop() {
       </div>
       <div class="stream-detail__controls">
         <button v-if="!currentState?.is_active" class="btn-primary" @click="onStart">▶ Старт</button>
-        <button v-else class="btn-danger" @click="onStop">⏹ Стоп</button>
+        <template v-else>
+          <button class="btn-danger" @click="onStop">⏹ Стоп</button>
+          <button class="btn-skip" @click="onSkip">⏭ Skip</button>
+        </template>
         <RouterLink :to="{ name: 'feed' }" class="btn-ghost">Лента</RouterLink>
       </div>
     </div>
@@ -94,7 +101,7 @@ async function onStop() {
       <div
         v-for="(item, idx) in queue"
         :key="item.id"
-        class="queue-item"
+        :class="['queue-item', { 'queue-item--active': currentState?.current_item_id === item.id }]"
         draggable="true"
         @dragend="onDragEnd"
       >
@@ -120,7 +127,7 @@ async function onStop() {
             class="song-search__item"
             @click="onAddSong(song.id)"
           >
-            {{ song.name }}
+            <span class="song-search__name">{{ song.name }}</span>
           </div>
         </div>
         <button class="btn-ghost" @click="showSongSearch = false">Закрыть</button>
@@ -199,6 +206,19 @@ async function onStop() {
   cursor: pointer;
   font-size: 14px;
 }
+.btn-skip {
+  background: transparent;
+  border: 1px solid var(--primary);
+  color: var(--primary);
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.btn-skip:hover {
+  background: var(--primary);
+  color: #fff;
+}
 .btn-ghost {
   background: transparent;
   border: 1px solid #333;
@@ -242,6 +262,13 @@ async function onStop() {
   border-radius: 6px;
   margin-bottom: 6px;
   cursor: grab;
+}
+.queue-item:hover {
+  background: #242833;
+}
+.queue-item--active {
+  border-left: 3px solid var(--primary);
+  background: #1e2130;
 }
 .queue-item__pos {
   color: var(--muted);
@@ -307,6 +334,9 @@ async function onStop() {
   overflow-y: auto;
 }
 .song-search__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px;
   color: var(--text);
   font-size: 14px;
@@ -315,6 +345,9 @@ async function onStop() {
 }
 .song-search__item:hover {
   background: #242833;
+}
+.song-search__name {
+  flex: 1;
 }
 .field {
   display: flex;

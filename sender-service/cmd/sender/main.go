@@ -6,15 +6,17 @@ import (
 	"log"
 	"net/http"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"radio/sender-service/internal/api"
+	"radio/sender-service/internal/api/skip"
+	"radio/sender-service/internal/api/websocket"
 	"radio/sender-service/internal/application"
 	"radio/sender-service/internal/infrastructure"
-	"radio/sender-service/internal/infrastructure/grpc"
 	contenthttp "radio/sender-service/internal/infrastructure/http"
 	"radio/sender-service/internal/infrastructure/redis"
-	"radio/sender-service/internal/api/websocket"
 )
 
 func main() {
@@ -26,49 +28,52 @@ func main() {
 		log.Fatalf("config: %v", err)
 	}
 
-	// Connect to stream-service gRPC
-	streamClient, err := grpc.NewStreamClient(cfg.StreamServiceGRPC)
-	if err != nil {
-		log.Fatalf("grpc connect: %v", err)
-	}
-	defer streamClient.Close()
+	hub := application.NewHub()
+	contentClient := contenthttp.NewContentClient(cfg.ContentServiceURL, cfg.ChunkSize)
 
-	// Connect to Redis
 	rdb, err := redis.NewClient(cfg.Redis)
 	if err != nil {
 		log.Fatalf("redis: %v", err)
 	}
+	defer rdb.Close()
 
-	// Create hub (manages per-stream buffers + WebSocket listeners)
-	hub := application.NewHub()
-
-	// Content Service client (fetches audio chunks)
-	contentClient := contenthttp.NewContentClient(cfg.ContentServiceURL, cfg.ChunkSize)
-
-	// Create sender service
-	svc := application.NewService(streamClient, contentClient, hub, application.SenderConfig{
-		ChunkSize:     cfg.ChunkSize,
-		BufferSeconds: cfg.BufferSeconds,
+	svc := application.NewService(contentClient, rdb, hub, application.SenderConfig{
+		ChunkSize:        cfg.ChunkSize,
+		Bitrate:          cfg.Bitrate,
+		BufferSeconds:    cfg.BufferSeconds,
+		PrefetchCount:    cfg.PrefetchCount,
+		NextSongPrefetch: cfg.NextSongPrefetch,
 	})
 
-	// Redis subscriber (listens to stream:events)
-	sub := application.NewRedisSubscriber(rdb)
-
-	// Worker (processes Redis events)
-	worker := application.NewWorker(svc, sub)
+	worker := application.NewWorker(svc, rdb)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// Start worker
 	go worker.Run(ctx)
 
-	// WebSocket handler
 	wsHandler := websocket.NewHandler(hub, svc)
+	statusHandler := api.NewStatusHandler(hub)
+	skipHandler := skip.NewHandler(svc)
+
+	combined := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// /stream/{id}/skip → skip handler
+		if strings.HasPrefix(r.URL.Path, "/stream/") && strings.HasSuffix(r.URL.Path, "/skip") {
+			skipHandler.ServeHTTP(w, r)
+			return
+		}
+		// /stream/{id}/status → status handler
+		if strings.HasPrefix(r.URL.Path, "/stream/") && strings.HasSuffix(r.URL.Path, "/status") {
+			statusHandler.ServeHTTP(w, r)
+			return
+		}
+		// /stream/{id} → WebSocket handler
+		wsHandler.ServeHTTP(w, r)
+	})
 
 	srv := &http.Server{
 		Addr:              cfg.HTTP.Addr,
-		Handler:           wsHandler,
+		Handler:           combined,
 		ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
 	}
 

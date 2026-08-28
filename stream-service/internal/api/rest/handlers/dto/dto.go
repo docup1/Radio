@@ -35,21 +35,18 @@ type StreamResponse struct {
 	UpdatedAt   string    `json:"updated_at"`
 }
 
-type StreamStateResponse struct {
-	StreamID       uuid.UUID  `json:"stream_id"`
-	CurrentQueueID *uuid.UUID `json:"current_queue_id,omitempty"`
-	StartedAt      *string    `json:"started_at,omitempty"`
-	IsActive       bool       `json:"is_active"`
-	Revision       int64      `json:"revision"`
-	UpdatedAt      string     `json:"updated_at"`
+type StreamStatusResponse struct {
+	IsActive      bool       `json:"is_active"`
+	CurrentItemID *uuid.UUID `json:"current_item_id,omitempty"`
+	CurrentSongID *uuid.UUID `json:"current_song_id,omitempty"`
+	Position      *int64     `json:"position,omitempty"`
+	QueueLength   int64      `json:"queue_length"`
 }
 
 type QueueItemResponse struct {
-	ID        uuid.UUID `json:"id"`
-	StreamID  uuid.UUID `json:"stream_id"`
-	SongID    uuid.UUID `json:"song_id"`
-	Position  int64     `json:"position"`
-	CreatedAt string    `json:"created_at"`
+	ID       uuid.UUID `json:"id"`
+	SongID   uuid.UUID `json:"song_id"`
+	Position int64     `json:"position"`
 }
 
 type HashtagResponse struct {

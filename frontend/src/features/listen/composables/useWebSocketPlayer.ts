@@ -43,7 +43,6 @@ export function useWebSocketPlayer() {
     analyser.fftSize = 256
     analyser.connect(audioCtx.destination)
 
-    // Resume after user gesture (browser blocks autoplay)
     if (audioCtx.state === 'suspended') {
       audioCtx.resume()
     }
@@ -57,6 +56,22 @@ export function useWebSocketPlayer() {
     }
 
     ws.onmessage = async (ev) => {
+      // Handle text (JSON control messages)
+      if (typeof ev.data === 'string') {
+        try {
+          const msg = JSON.parse(ev.data)
+          if (msg.type === 'song') {
+            // New song — clear buffer and reset timing
+            bufferQueue = []
+            playing = false
+            nextPlayTime = 0
+            st.currentSong = msg.songId
+          }
+        } catch { /* ignore */ }
+        return
+      }
+
+      // Handle binary (audio chunks)
       if (!(ev.data instanceof ArrayBuffer)) return
       try {
         const audioBuffer = await audioCtx!.decodeAudioData(ev.data)

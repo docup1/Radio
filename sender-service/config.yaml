@@ -5,13 +5,10 @@ http:
   addr: ":8081"
   read_header_timeout: 5s
 
-redis:
-  addr: redis:6379
-  password: ""
-  db: 0
-
-stream_service_grpc: "stream-service:8082"
+redis: "redis:6379"
 content_service_url: "http://content-service:8081"
 
-chunk_size: 65536        # 64KB
+chunk_size: 65536
 buffer_seconds: 5
+prefetch_count: 8
+next_song_prefetch: 1

@@ -2,33 +2,31 @@ package application
 
 import (
 	"context"
-	"encoding/json"
 	"log"
-	"time"
 
 	"github.com/google/uuid"
+	goredis "github.com/redis/go-redis/v9"
 
-	"radio/stream-service/internal/domain/models"
 	"radio/stream-service/internal/domain/interfaces"
-	"radio/stream-service/internal/infrastructure/redis"
+	"radio/stream-service/internal/domain/models"
+	svcredis "radio/stream-service/internal/infrastructure/redis"
 )
 
 type Repos struct {
 	Streams  interfaces.StreamRepository
-	State    interfaces.StreamStateRepository
-	Queue    interfaces.QueueRepository
 	Hashtags interfaces.HashtagRepository
-	Outbox   interfaces.OutboxRepository
 }
 
 type Service struct {
-	repos  Repos
-	pub    *redis.Publisher
+	repos   Repos
+	q       *svcredis.QueueStore
+	pub     *svcredis.Publisher
+	rdb     *goredis.Client
 	checker interfaces.SongChecker
 }
 
-func New(repos Repos, pub *redis.Publisher, checker interfaces.SongChecker) *Service {
-	return &Service{repos: repos, pub: pub, checker: checker}
+func New(repos Repos, q *svcredis.QueueStore, pub *svcredis.Publisher, checker interfaces.SongChecker, rdb *goredis.Client) *Service {
+	return &Service{repos: repos, q: q, pub: pub, checker: checker, rdb: rdb}
 }
 
 // --- Stream ---
@@ -42,21 +40,11 @@ func (s *Service) GetOrCreateStream(ctx context.Context, userID uuid.UUID) (*mod
 		return nil, err
 	}
 
-	// Lazy-create stream with default name
 	stream = &models.Stream{
 		ID:   userID,
 		Name: "My Stream",
 	}
 	if err := s.repos.Streams.Create(ctx, stream); err != nil {
-		return nil, err
-	}
-
-	state := &models.StreamState{
-		StreamID: userID,
-		IsActive: false,
-		Revision: 0,
-	}
-	if err := s.repos.State.Create(ctx, state); err != nil {
 		return nil, err
 	}
 	return s.repos.Streams.GetByID(ctx, userID)
@@ -66,8 +54,9 @@ func (s *Service) GetStream(ctx context.Context, id uuid.UUID) (*models.Stream, 
 	return s.repos.Streams.GetByID(ctx, id)
 }
 
-func (s *Service) ListActiveStreams(ctx context.Context) ([]*models.StreamState, error) {
-	return s.repos.State.ListActive(ctx)
+// ListActiveStreams scans Redis for live streams (feed).
+func (s *Service) ListActiveStreams(ctx context.Context) ([]uuid.UUID, error) {
+	return svcredis.GetActiveStreamIDs(ctx, s.rdb)
 }
 
 func (s *Service) UpdateStream(ctx context.Context, id uuid.UUID, name, description string, loop bool) (*models.Stream, error) {
@@ -80,22 +69,87 @@ func (s *Service) UpdateStream(ctx context.Context, id uuid.UUID, name, descript
 	if err := s.repos.Streams.Update(ctx, stream); err != nil {
 		return nil, err
 	}
+	// Keep the active-session loop snapshot in sync.
+	if err := s.q.SetLoop(ctx, id, loop); err != nil {
+		log.Printf("[service] sync loop flag %s: %v", id, err)
+	}
 	return s.repos.Streams.GetByID(ctx, id)
 }
 
 func (s *Service) DeleteStream(ctx context.Context, id uuid.UUID) error {
+	if err := s.Stop(ctx, id); err != nil && err != models.ErrConflict {
+		return err
+	}
 	return s.repos.Streams.Delete(ctx, id)
+}
+
+// --- Playback control (stream-service owns the state, sender executes) ---
+
+// Start activates a stream: marks it live and tells the sender to serve the first song.
+func (s *Service) Start(ctx context.Context, streamID uuid.UUID) error {
+	stream, err := s.repos.Streams.GetByID(ctx, streamID)
+	if err != nil {
+		return err
+	}
+
+	active, err := s.q.IsActive(ctx, streamID)
+	if err != nil {
+		return err
+	}
+	if active {
+		return models.ErrConflict
+	}
+
+	items, err := s.q.List(ctx, streamID)
+	if err != nil {
+		return err
+	}
+	if len(items) == 0 {
+		return models.ErrInvalid
+	}
+
+	first := items[0]
+	if err := s.q.SetActive(ctx, streamID); err != nil {
+		return err
+	}
+	if err := s.q.SetCursor(ctx, streamID, first.ID); err != nil {
+		return err
+	}
+	if err := s.q.SetLoop(ctx, streamID, stream.Loop); err != nil {
+		return err
+	}
+	return s.pub.PublishStreamStarted(ctx, streamID, first.ID, first.SongID)
+}
+
+// Stop deactivates a stream: wipes all runtime keys and tells the sender to tear down.
+func (s *Service) Stop(ctx context.Context, streamID uuid.UUID) error {
+	active, err := s.q.IsActive(ctx, streamID)
+	if err != nil {
+		return err
+	}
+	if !active {
+		return models.ErrConflict
+	}
+
+	if err := s.q.Clear(ctx, streamID); err != nil {
+		log.Printf("[service] clear %s: %v", streamID, err)
+	}
+	return s.pub.PublishStreamStopped(ctx, streamID)
+}
+
+// --- Status ---
+
+func (s *Service) GetStatus(ctx context.Context, streamID uuid.UUID) (*models.StreamStatus, error) {
+	return s.q.Status(ctx, streamID)
 }
 
 // --- Queue ---
 
-func (s *Service) AddToQueue(ctx context.Context, streamID, songID uuid.UUID) (*models.StreamQueueItem, error) {
-	// Validate stream exists
+func (s *Service) AddToQueue(ctx context.Context, streamID, songID uuid.UUID) (*models.QueueItem, error) {
 	if _, err := s.repos.Streams.GetByID(ctx, streamID); err != nil {
 		return nil, err
 	}
 
-	// Validate song via content-service
 	allowed, err := s.checker.Check(ctx, streamID.String(), songID.String())
 	if err != nil {
 		return nil, err
@@ -104,113 +158,39 @@ func (s *Service) AddToQueue(ctx context.Context, streamID, songID uuid.UUID) (*
 		return nil, models.ErrForbidden
 	}
 
-	pos, err := s.repos.Queue.MaxPosition(ctx, streamID)
+	item, err := s.q.Add(ctx, streamID, songID)
 	if err != nil {
 		return nil, err
 	}
 
-	item := &models.StreamQueueItem{
-		ID:       uuid.New(),
-		StreamID: streamID,
-		SongID:   songID,
-		Position: pos + 1,
+	if err := s.pub.PublishQueueUpdated(ctx, streamID); err != nil {
+		log.Printf("[service] publish queue_updated: %v", err)
 	}
-	if err := s.repos.Queue.Add(ctx, item); err != nil {
-		return nil, err
-	}
-
-	// Publish QUEUE_UPDATED via outbox
-	if err := s.publishEvent(ctx, "stream", streamID, models.EventQueueUpdated, nil); err != nil {
-		log.Printf("[service] outbox QUEUE_UPDATED: %v", err)
-	}
-
 	return item, nil
 }
 
-func (s *Service) ListQueue(ctx context.Context, streamID uuid.UUID) ([]*models.StreamQueueItem, error) {
-	return s.repos.Queue.ListByStream(ctx, streamID)
+func (s *Service) ListQueue(ctx context.Context, streamID uuid.UUID) ([]*models.QueueItem, error) {
+	return s.q.List(ctx, streamID)
 }
 
 func (s *Service) RemoveFromQueue(ctx context.Context, streamID, itemID uuid.UUID) error {
-	item, err := s.repos.Queue.GetByID(ctx, itemID)
-	if err != nil {
+	if err := s.q.Remove(ctx, streamID, itemID); err != nil {
 		return err
 	}
-	if item.StreamID != streamID {
-		return models.ErrNotFound
+	if err := s.pub.PublishQueueUpdated(ctx, streamID); err != nil {
+		log.Printf("[service] publish queue_updated (remove): %v", err)
 	}
-	return s.repos.Queue.Remove(ctx, itemID)
+	return nil
 }
 
 func (s *Service) MoveQueueItem(ctx context.Context, streamID, itemID uuid.UUID, newPosition int64) error {
-	item, err := s.repos.Queue.GetByID(ctx, itemID)
-	if err != nil {
+	if err := s.q.Move(ctx, streamID, itemID, newPosition); err != nil {
 		return err
 	}
-	if item.StreamID != streamID {
-		return models.ErrNotFound
+	if err := s.pub.PublishQueueUpdated(ctx, streamID); err != nil {
+		log.Printf("[service] publish queue_updated (move): %v", err)
 	}
-	return s.repos.Queue.Move(ctx, itemID, newPosition)
-}
-
-// --- Stream Control ---
-
-func (s *Service) StartStream(ctx context.Context, streamID uuid.UUID) (*models.StreamState, error) {
-	_, err := s.repos.Streams.GetByID(ctx, streamID)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get first queue item
-	first, err := s.repos.Queue.GetFirst(ctx, streamID)
-	if err != nil {
-		return nil, err
-	}
-	if first == nil {
-		return nil, models.ErrInvalid
-	}
-
-	now := time.Now().UTC()
-
-	// Atomic: set state + outbox
-	st, err := s.repos.State.Advance(ctx, streamID, &first.ID, now)
-	if err != nil {
-		return nil, err
-	}
-	st.IsActive = true
-	if err := s.repos.State.Update(ctx, st); err != nil {
-		return nil, err
-	}
-
-	// Outbox: STREAM_STARTED
-	payload := map[string]interface{}{
-		"song_id":    first.SongID.String(),
-		"started_at": now.Format(time.RFC3339Nano),
-	}
-	if err := s.publishEvent(ctx, "stream", streamID, models.EventStreamStarted, payload); err != nil {
-		log.Printf("[service] outbox STREAM_STARTED: %v", err)
-	}
-
-	return st, nil
-}
-
-func (s *Service) StopStream(ctx context.Context, streamID uuid.UUID) (*models.StreamState, error) {
-	st, err := s.repos.State.SetActive(ctx, streamID, false)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.publishEvent(ctx, "stream", streamID, models.EventStreamEnded, nil); err != nil {
-		log.Printf("[service] outbox STREAM_ENDED: %v", err)
-	}
-	return st, nil
-}
-
-func (s *Service) GetState(ctx context.Context, streamID uuid.UUID) (*models.StreamState, error) {
-	return s.repos.State.GetByStreamID(ctx, streamID)
-}
-
-func (s *Service) GetQueueItem(ctx context.Context, itemID uuid.UUID) (*models.StreamQueueItem, error) {
-	return s.repos.Queue.GetByID(ctx, itemID)
+	return nil
 }
 
 // --- Hashtags ---
@@ -236,115 +216,4 @@ func (s *Service) ListHashtags(ctx context.Context, streamID uuid.UUID) ([]*mode
 
 func (s *Service) RemoveHashtag(ctx context.Context, streamID, hashtagID uuid.UUID) error {
 	return s.repos.Hashtags.Remove(ctx, hashtagID)
-}
-
-// --- Internal: Advance song (called by worker on SONG_COMPLETE or watchdog) ---
-
-func (s *Service) AdvanceSong(ctx context.Context, streamID uuid.UUID) (*models.StreamState, error) {
-	st, err := s.repos.State.GetByStreamID(ctx, streamID)
-	if err != nil {
-		return nil, err
-	}
-	if !st.IsActive {
-		return st, nil
-	}
-
-	// Find next queue item after current
-	var next *models.StreamQueueItem
-	if st.CurrentQueueID != nil {
-		current, err := s.repos.Queue.GetByID(ctx, *st.CurrentQueueID)
-		if err != nil {
-			return nil, err
-		}
-		next, err = s.repos.Queue.GetNextAfterPosition(ctx, streamID, current.Position)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		next, err = s.repos.Queue.GetFirst(ctx, streamID)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	stream, err := s.repos.Streams.GetByID(ctx, streamID)
-	if err != nil {
-		return nil, err
-	}
-
-	now := time.Now().UTC()
-
-	if next == nil {
-		// No next song
-		if stream.Loop {
-			// Loop: restart from first
-			first, err := s.repos.Queue.GetFirst(ctx, streamID)
-			if err != nil {
-				return nil, err
-			}
-			if first == nil {
-				// Queue empty → stop
-				return s.repos.State.SetActive(ctx, streamID, false)
-			}
-			st, err = s.repos.State.Advance(ctx, streamID, &first.ID, now)
-			if err != nil {
-				return nil, err
-			}
-			payload := map[string]interface{}{
-				"song_id":    first.SongID.String(),
-				"started_at": now.Format(time.RFC3339Nano),
-			}
-			if err := s.publishEvent(ctx, "stream", streamID, models.EventSongChanged, payload); err != nil {
-				log.Printf("[service] outbox STREAM_SONG_CHANGED: %v", err)
-			}
-			return st, nil
-		}
-		// No loop → stop
-		st, err = s.repos.State.SetActive(ctx, streamID, false)
-		if err != nil {
-			return nil, err
-		}
-		if err := s.publishEvent(ctx, "stream", streamID, models.EventStreamEnded, nil); err != nil {
-			log.Printf("[service] outbox STREAM_ENDED: %v", err)
-		}
-		return st, nil
-	}
-
-	// Advance to next song
-	st, err = s.repos.State.Advance(ctx, streamID, &next.ID, now)
-	if err != nil {
-		return nil, err
-	}
-	payload := map[string]interface{}{
-		"song_id":    next.SongID.String(),
-		"started_at": now.Format(time.RFC3339Nano),
-	}
-	if err := s.publishEvent(ctx, "stream", streamID, models.EventSongChanged, payload); err != nil {
-		log.Printf("[service] outbox STREAM_SONG_CHANGED: %v", err)
-	}
-	return st, nil
-}
-
-// --- Helpers ---
-
-func (s *Service) publishEvent(ctx context.Context, aggregateType string, aggregateID uuid.UUID, eventType string, payload interface{}) error {
-	var raw json.RawMessage
-	if payload != nil {
-		b, err := json.Marshal(payload)
-		if err != nil {
-			return err
-		}
-		raw = b
-	} else {
-		raw = json.RawMessage(`{}`)
-	}
-
-	event := &models.OutboxEvent{
-		ID:            uuid.New(),
-		AggregateType: aggregateType,
-		AggregateID:   aggregateID,
-		EventType:     eventType,
-		Payload:       raw,
-	}
-	return s.repos.Outbox.Insert(ctx, event)
 }

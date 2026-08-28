@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import type { Stream } from '@/shared/api/types'
-import type { PlayerState } from '../composables/useWebSocketPlayer'
+import type { PlayerState } from '../composables/useMSEPlayer'
 
 defineProps<{ stream: Stream; currentSong: string | null; pulseScale: number; state: PlayerState }>()
 defineEmits<{ play: []; back: [] }>()
+defineExpose({ isPaused: Boolean })
 </script>
 
 <template>
@@ -26,6 +27,7 @@ defineEmits<{ play: []; back: [] }>()
       >
         &#9654; Слушать
       </button>
+      <span v-else-if="state === 'playing'" class="stream-player__status">&#9835; Играет</span>
       <span v-else-if="state === 'connecting'" class="stream-player__status">Подключение...</span>
       <span v-else-if="state === 'error'" class="stream-player__status stream-player__status--error">Ошибка</span>
     </div>
