@@ -54,6 +54,7 @@ func (h *StatusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sh.RLock()
+	active := sh.Active
 	songID := sh.SongID
 	bytesSent := sh.BytesSent
 	fileSize := sh.FileSize
@@ -62,12 +63,12 @@ func (h *StatusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	resp := StatusResponse{
 		StreamID:  streamID.String(),
-		Active:    true,
+		Active:    active,
 		BytesSent: bytesSent,
 		FileSize:  fileSize,
 	}
 
-	if songID != uuid.Nil {
+	if active && songID != uuid.Nil {
 		resp.SongID = songID.String()
 		resp.PositionSeconds = time.Since(time.Unix(0, startedAt)).Seconds()
 	}

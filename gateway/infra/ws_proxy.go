@@ -30,7 +30,8 @@ func NewWSProxy(upstreamURL string) (*WSProxy, error) {
 
 // ServeWS upgrades the client connection, dials upstream, and bridges both directions.
 // path is the sub-path to append to the upstream URL (e.g. "/stream/abc123").
-func (p *WSProxy) ServeWS(w http.ResponseWriter, r *http.Request, path string) {
+// dialHeaders are extra HTTP headers sent to the upstream WebSocket handshake.
+func (p *WSProxy) ServeWS(w http.ResponseWriter, r *http.Request, path string, dialHeaders http.Header) {
 	// 1. Upgrade client → WebSocket
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool { return true },
@@ -43,7 +44,7 @@ func (p *WSProxy) ServeWS(w http.ResponseWriter, r *http.Request, path string) {
 
 	// 2. Dial upstream
 	upstreamURL := p.upstream.String() + path
-	upstreamConn, _, err := p.dialer.Dial(upstreamURL, nil)
+	upstreamConn, _, err := p.dialer.Dial(upstreamURL, dialHeaders)
 	if err != nil {
 		log.Printf("[ws-proxy] dial %s: %v", upstreamURL, err)
 		clientConn.Close()

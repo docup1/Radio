@@ -19,3 +19,5 @@ require (
 	golang.org/x/text v0.41.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 )
+
+replace radio/sender-service => /Users/docup/Projects/Radio/sender-service

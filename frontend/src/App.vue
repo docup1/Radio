@@ -2,7 +2,11 @@
 import { computed } from 'vue'
 import { RouterView, useRouter } from 'vue-router'
 import { isAuthenticated, user, logout } from '@/shared/store/auth'
+import { initRadio } from '@/shared/radio/store'
 import PlayerBar from '@/features/content/components/PlayerBar.vue'
+import RadioBar from '@/shared/components/RadioBar.vue'
+
+initRadio()
 
 const router = useRouter()
 const username = computed(() => user.value?.username ?? '')
@@ -43,6 +47,7 @@ async function onLogout() {
     </main>
 
     <PlayerBar />
+    <RadioBar />
   </div>
 </template>
 

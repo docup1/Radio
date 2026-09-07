@@ -4,12 +4,13 @@ import { useRouter } from 'vue-router'
 import { useStreams } from '../composables/useStreams'
 import { useStreamQueue } from '../composables/useStreamQueue'
 import { useSongs } from '@/features/content/composables/useSongs'
+import { radio, isOwnerFor, openStream, start, stop, skip } from '@/shared/radio/store'
 import type { QueueItem } from '@/shared/api/types'
 
 const props = defineProps<{ id: string }>()
 const router = useRouter()
 
-const { stream: current, currentState, get, start, stop, skip, update } = useStreams()
+const { stream: current, get, update } = useStreams()
 const { queue, load: loadQueue, add, remove, reorder } = useStreamQueue(props.id)
 const { songs, query, loading: songsLoading, load: loadSongs, setQuery } = useSongs()
 
@@ -20,6 +21,14 @@ const loop = ref(false)
 const saving = ref(false)
 const showSongSearch = ref(false)
 
+const isOwner = isOwnerFor(props.id)
+const currentState = ref<{
+  is_active: boolean
+  current_song_id: string | null
+  current_item_id: string | null
+  queue_length: number
+} | null>(null)
+
 onMounted(async () => {
   await Promise.all([get(props.id), loadQueue()])
   if (current.value) {
@@ -27,6 +36,7 @@ onMounted(async () => {
     description.value = current.value.description
     loop.value = current.value.loop
   }
+  openStream(props.id)
 })
 
 function onSearchSongs() {
@@ -58,15 +68,19 @@ async function onSaveSettings() {
 }
 
 async function onStart() {
-  await start(props.id)
+  start()
 }
 
 async function onStop() {
-  await stop(props.id)
+  stop()
 }
 
 async function onSkip() {
-  await skip(props.id)
+  skip()
+}
+
+function onListen() {
+  router.push({ name: 'listen', params: { id: props.id } })
 }
 </script>
 
@@ -76,17 +90,34 @@ async function onSkip() {
       <div>
         <h1>{{ current.name }}</h1>
         <p class="stream-detail__status">
-          <span :class="['status-dot', currentState?.is_active ? 'status-dot--active' : '']" />
-          {{ currentState?.is_active ? 'Активен' : 'Остановлен' }}
+          <span :class="['status-dot', radio.isActive ? 'status-dot--active' : '']" />
+          {{ radio.isActive ? 'Активен' : 'Остановлен' }}
+          <template v-if="radio.song">
+            <span class="stream-detail__song"> · ♫ {{ radio.song.name ?? radio.song.id }}</span>
+          </template>
         </p>
       </div>
       <div class="stream-detail__controls">
-        <button v-if="!currentState?.is_active" class="btn-primary" @click="onStart">▶ Старт</button>
-        <template v-else>
-          <button class="btn-danger" @click="onStop">⏹ Стоп</button>
-          <button class="btn-skip" @click="onSkip">⏭ Skip</button>
+        <template v-if="isOwner">
+          <button v-if="!radio.isActive" class="btn-primary" @click="onStart">▶ Старт</button>
+          <template v-else>
+            <button class="btn-danger" @click="onStop">⏹ Стоп</button>
+            <button class="btn-skip" @click="onSkip">⏭ Skip</button>
+          </template>
         </template>
+        <button class="btn-ghost" @click="onListen">▶ Слушать</button>
         <RouterLink :to="{ name: 'feed' }" class="btn-ghost">Лента</RouterLink>
+      </div>
+    </div>
+
+    <div v-if="radio.feed.length > 0" class="stream-detail__feed">
+      <div v-for="(item, i) in radio.feed.slice(0, 5)" :key="item.at + '-' + i" class="stream-detail__feed-item">
+        <span class="stream-detail__feed-icon" :class="`stream-detail__feed-icon--${item.type}`">
+          {{ item.type === 'song' ? '♫' : item.type === 'song_ended' ? '▶' : item.type === 'error' ? '⚠' : '●' }}
+        </span>
+        <span class="stream-detail__feed-text">
+          {{ item.type === 'song' ? (item.songName ? `Играет: ${item.songName}` : 'Следующая песня') : item.type === 'song_ended' ? 'Песня закончилась' : item.type === 'error' ? (item.message ?? 'Ошибка') : (item.message ?? (item.type === 'stream_ended' ? 'Стрим завершён' : 'Стрим остановлен')) }}
+        </span>
       </div>
     </div>
 
@@ -101,7 +132,7 @@ async function onSkip() {
       <div
         v-for="(item, idx) in queue"
         :key="item.id"
-        :class="['queue-item', { 'queue-item--active': currentState?.current_item_id === item.id }]"
+        :class="['queue-item', { 'queue-item--active': radio.currentItemId === item.id }]"
         draggable="true"
         @dragend="onDragEnd"
       >
@@ -183,6 +214,37 @@ async function onSkip() {
 }
 .status-dot--active {
   background: #22c55e;
+}
+.stream-detail__song {
+  color: var(--primary);
+  font-weight: 500;
+}
+.stream-detail__feed {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  background: #1a1d27;
+  border-radius: 6px;
+}
+.stream-detail__feed-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.stream-detail__feed-icon--song {
+  color: var(--primary);
+}
+.stream-detail__feed-icon--error {
+  color: #ef4444;
+}
+.stream-detail__feed-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .stream-detail__controls {
   display: flex;

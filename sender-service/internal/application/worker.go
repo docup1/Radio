@@ -108,7 +108,7 @@ func (w *Worker) handleEvent(ctx context.Context, streamID uuid.UUID, evt *redis
 
 	case "stream_stopped":
 		log.Printf("[worker] stream_stopped stream=%s", streamID)
-		w.svc.StopStream(streamID)
+		w.svc.HandleStreamStopped(streamID)
 
 	case "queue_updated":
 		log.Printf("[worker] queue_updated stream=%s", streamID)

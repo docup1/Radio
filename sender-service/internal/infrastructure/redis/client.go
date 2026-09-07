@@ -250,6 +250,39 @@ func (c *Client) IsActive(ctx context.Context, streamID uuid.UUID) (bool, error)
 	return n > 0, nil
 }
 
+// Deactivate removes the active marker, cursor and loop key but leaves the
+// queue intact so the stream can be restarted without re-adding songs.
+func (c *Client) Deactivate(ctx context.Context, streamID uuid.UUID) error {
+	_, err := c.rdb.Del(ctx, activeKey(streamID), cursorKey(streamID), loopKey(streamID)).Result()
+	if err != nil {
+		return fmt.Errorf("deactivate %s: %w", streamID, err)
+	}
+	return nil
+}
+
+// SetActive creates (or refreshes) the active key with the standard TTL.
+func (c *Client) SetActive(ctx context.Context, streamID uuid.UUID) error {
+	return c.rdb.Set(ctx, activeKey(streamID), "1", activeTTL).Err()
+}
+
+// SetLoop stores the loop flag (0 or 1) for the active session.
+func (c *Client) SetLoop(ctx context.Context, streamID uuid.UUID, loop bool) error {
+	v := "0"
+	if loop {
+		v = "1"
+	}
+	return c.rdb.Set(ctx, loopKey(streamID), v, 0).Err()
+}
+
+// QueueLen returns the length of the queue.
+func (c *Client) QueueLen(ctx context.Context, streamID uuid.UUID) (int64, error) {
+	n, err := c.rdb.LLen(ctx, queueKey(streamID)).Result()
+	if err != nil {
+		return 0, fmt.Errorf("llen %s: %w", streamID, err)
+	}
+	return n, nil
+}
+
 // DeleteStreamState wipes all runtime keys of the stream (queue, cursor, active, loop, events).
 func (c *Client) DeleteStreamState(ctx context.Context, streamID uuid.UUID) error {
 	pipe := c.rdb.Pipeline()
