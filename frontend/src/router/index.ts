@@ -2,14 +2,11 @@ import { createRouter, createWebHistory } from 'vue-router'
 import LoginPage from '@/features/auth/pages/LoginPage.vue'
 import RegisterPage from '@/features/auth/pages/RegisterPage.vue'
 import ProfilePage from '@/features/profile/pages/ProfilePage.vue'
-import SongsPage from '@/features/content/pages/SongsPage.vue'
+import SettingsPage from '@/features/profile/pages/SettingsPage.vue'
 import SongNewPage from '@/features/content/pages/SongNewPage.vue'
 import SongDetailPage from '@/features/content/pages/SongDetailPage.vue'
 import SongEditPage from '@/features/content/pages/SongEditPage.vue'
-import PlaylistsPage from '@/features/content/pages/PlaylistsPage.vue'
 import PlaylistDetailPage from '@/features/content/pages/PlaylistDetailPage.vue'
-import StreamsPage from '@/features/streams/pages/StreamsPage.vue'
-import StreamDetailPage from '@/features/streams/pages/StreamDetailPage.vue'
 import FeedPage from '@/features/listen/pages/FeedPage.vue'
 import ListenPage from '@/features/listen/pages/ListenPage.vue'
 import { isAuthenticated } from '@/shared/store/auth'
@@ -17,11 +14,11 @@ import { isAuthenticated } from '@/shared/store/auth'
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', redirect: '/content/songs' },
+    { path: '/', name: 'feed', component: FeedPage, meta: { public: true, publicAlways: true } },
     { path: '/login', name: 'login', component: LoginPage, meta: { public: true } },
     { path: '/register', name: 'register', component: RegisterPage, meta: { public: true } },
     { path: '/profile', name: 'profile', component: ProfilePage },
-    { path: '/content/songs', name: 'songs', component: SongsPage },
+    { path: '/profile/settings', name: 'settings', component: SettingsPage },
     { path: '/content/songs/new', name: 'song-new', component: SongNewPage },
     { path: '/content/songs/:id', name: 'song-detail', component: SongDetailPage, props: true },
     {
@@ -30,27 +27,18 @@ const router = createRouter({
       component: SongEditPage,
       props: true,
     },
-    { path: '/content/playlists', name: 'playlists', component: PlaylistsPage },
     {
       path: '/content/playlists/:id',
       name: 'playlist-detail',
       component: PlaylistDetailPage,
       props: true,
     },
-    { path: '/content/streams', name: 'streams', component: StreamsPage },
-    {
-      path: '/content/streams/:id',
-      name: 'stream-detail',
-      component: StreamDetailPage,
-      props: true,
-    },
-    { path: '/streams', name: 'feed', component: FeedPage, meta: { public: true, publicAlways: true } },
     {
       path: '/streams/:id/listen',
       name: 'listen',
       component: ListenPage,
       props: true,
-      meta: { public: true, publicAlways: true },
+      meta: { public: true, publicAlways: true, hidePlayer: true },
     },
   ],
 })

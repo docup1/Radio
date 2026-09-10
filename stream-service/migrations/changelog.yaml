@@ -96,3 +96,19 @@ databaseChangeLog:
             tableName: hashtags
         - dropTable:
             tableName: streams
+
+  - changeSet:
+      id: 002-pgtrgm-search
+      author: radio
+      changes:
+        - sql:
+            sql: CREATE EXTENSION IF NOT EXISTS pg_trgm
+        - sql:
+            sql: CREATE INDEX IF NOT EXISTS idx_streams_name_trgm ON streams USING gin (name gin_trgm_ops)
+        - sql:
+            sql: CREATE INDEX IF NOT EXISTS idx_streams_description_trgm ON streams USING gin (description gin_trgm_ops)
+      rollback:
+        - sql:
+            sql: DROP INDEX IF EXISTS idx_streams_description_trgm
+        - sql:
+            sql: DROP INDEX IF EXISTS idx_streams_name_trgm

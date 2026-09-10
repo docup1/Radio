@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { content } from '@/shared/api/content'
 import { useUpload } from '@/features/content/composables/useUpload'
+import { t } from '@/shared/i18n'
 
 const router = useRouter()
 const { progress, uploadFile } = useUpload()
@@ -48,11 +49,11 @@ function onDropImage(e: DragEvent) {
 async function submit() {
   error.value = ''
   if (!name.value.trim()) {
-    error.value = 'Название обязательно'
+    error.value = t('songs.nameRequired')
     return
   }
   if (!audioFile.value) {
-    error.value = 'Выберите аудио-файл'
+    error.value = t('songs.audioRequired')
     return
   }
   submitting.value = true
@@ -72,7 +73,7 @@ async function submit() {
     })
     router.push(`/content/songs/${song.id}`)
   } catch (e: unknown) {
-    error.value = e instanceof Error ? e.message : 'Ошибка создания'
+    error.value = e instanceof Error ? e.message : t('songs.createError')
   } finally {
     submitting.value = false
   }
@@ -81,44 +82,45 @@ async function submit() {
 
 <template>
   <div class="new-page">
-    <h1>Новая песня</h1>
+    <RouterLink to="/profile" class="back">{{ t('player.back') }}</RouterLink>
+    <h1>{{ t('songs.newPage') }}</h1>
 
     <div class="form">
       <label class="field">
-        <span>Название *</span>
-        <input v-model="name" placeholder="Как называется трек" />
+        <span>{{ t('songs.name') }} *</span>
+        <input v-model="name" :placeholder="t('songs.namePlaceholder')" />
       </label>
 
       <label class="field">
-        <span>Описание</span>
-        <textarea v-model="description" rows="3" placeholder="Необязательно" />
+        <span>{{ t('songs.description') }}</span>
+        <textarea v-model="description" rows="3" :placeholder="t('songs.notRequired')" />
       </label>
 
       <label class="check">
         <input v-model="isPublic" type="checkbox" />
-        Публичная (видна всем)
+        {{ t('songs.publicVisible') }}
       </label>
 
       <div class="dropzone" @dragover.prevent @drop="onDropAudio">
-        <div class="dz-title">Аудио *</div>
+        <div class="dz-title">{{ t('songs.audio') }} *</div>
         <div v-if="audioPreview" class="preview">{{ audioPreview }}</div>
-        <div v-else class="hint">Перетащите mp3/wav/ogg сюда или выберите файл</div>
+        <div v-else class="hint">{{ t('songs.audioDrop') }}</div>
         <input type="file" accept="audio/*" @change="onAudio" />
       </div>
 
       <div class="dropzone" @dragover.prevent @drop="onDropImage">
-        <div class="dz-title">Обложка (необязательно)</div>
+        <div class="dz-title">{{ t('songs.image') }}</div>
         <img v-if="imagePreview" :src="imagePreview" class="img-preview" alt="" />
-        <div v-else class="hint">Перетащите картинку или выберите файл</div>
+        <div v-else class="hint">{{ t('songs.imageDrop') }}</div>
         <input type="file" accept="image/*" @change="onImage" />
       </div>
 
-      <div v-if="submitting" class="progress">Загрузка… {{ progress }}%</div>
+      <div v-if="submitting" class="progress">{{ t('songs.uploading') }} {{ progress }}%</div>
       <div v-if="error" class="error">{{ error }}</div>
 
       <div class="actions">
-        <button :disabled="submitting" class="primary" @click="submit">Создать</button>
-        <RouterLink to="/content/songs" class="secondary">Отмена</RouterLink>
+        <button :disabled="submitting" class="primary" @click="submit">{{ t('songs.create') }}</button>
+        <RouterLink to="/profile" class="secondary">{{ t('common.cancel') }}</RouterLink>
       </div>
     </div>
   </div>
@@ -126,7 +128,25 @@ async function submit() {
 
 <style scoped>
 .new-page {
-  max-width: 640px;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 104px 24px 96px;
+}
+.back {
+  display: inline-block;
+  margin-bottom: 12px;
+  background: transparent;
+  border: 1px solid #333;
+  color: var(--muted);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  text-decoration: none;
+}
+.back:hover {
+  color: var(--text);
+  border-color: #555;
 }
 .form {
   display: flex;

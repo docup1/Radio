@@ -87,6 +87,7 @@ export interface Stream {
   name: string
   description: string
   loop: boolean
+  current_song_id: string | null
   created_at: string
   updated_at: string
 }

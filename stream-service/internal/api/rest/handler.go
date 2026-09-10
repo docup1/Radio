@@ -3,6 +3,8 @@ package rest
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -77,37 +79,45 @@ func (h *Handler) getUserStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	WriteJSON(w, http.StatusOK, dto.StreamResponse{
-		ID:          stream.ID,
-		Name:        stream.Name,
-		Description: stream.Description,
-		Loop:        stream.Loop,
-		CreatedAt:   stream.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		UpdatedAt:   stream.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-	})
+	WriteJSON(w, http.StatusOK, toStreamResponse(stream, nil))
+}
+
+func toStreamResponse(st *models.Stream, currentSongID *uuid.UUID) dto.StreamResponse {
+	return dto.StreamResponse{
+		ID:            st.ID,
+		Name:          st.Name,
+		Description:   st.Description,
+		Loop:          st.Loop,
+		CurrentSongID: currentSongID,
+		CreatedAt:     st.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		UpdatedAt:     st.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+	}
 }
 
 func (h *Handler) feed(w http.ResponseWriter, r *http.Request) {
-	streamIDs, err := h.svc.ListActiveStreams(r.Context())
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	limit := 20
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	offset := 0
+	if raw := r.URL.Query().Get("offset"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			offset = n
+		}
+	}
+
+	items, err := h.svc.Feed(r.Context(), q, limit, offset)
 	if err != nil {
 		WriteServiceError(w, err)
 		return
 	}
 
-	result := make([]dto.StreamResponse, 0, len(streamIDs))
-	for _, streamID := range streamIDs {
-		stream, err := h.svc.GetStream(r.Context(), streamID)
-		if err != nil {
-			continue
-		}
-		result = append(result, dto.StreamResponse{
-			ID:          stream.ID,
-			Name:        stream.Name,
-			Description: stream.Description,
-			Loop:        stream.Loop,
-			CreatedAt:   stream.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-			UpdatedAt:   stream.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		})
+	result := make([]dto.StreamResponse, 0, len(items))
+	for _, item := range items {
+		result = append(result, toStreamResponse(item.Stream, item.CurrentSongID))
 	}
 	WriteJSON(w, http.StatusOK, result)
 }
@@ -125,14 +135,7 @@ func (h *Handler) getStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	WriteJSON(w, http.StatusOK, dto.StreamResponse{
-		ID:          stream.ID,
-		Name:        stream.Name,
-		Description: stream.Description,
-		Loop:        stream.Loop,
-		CreatedAt:   stream.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		UpdatedAt:   stream.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-	})
+	WriteJSON(w, http.StatusOK, toStreamResponse(stream, nil))
 }
 
 func (h *Handler) updateStream(w http.ResponseWriter, r *http.Request) {
@@ -166,14 +169,7 @@ func (h *Handler) updateStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	WriteJSON(w, http.StatusOK, dto.StreamResponse{
-		ID:          stream.ID,
-		Name:        stream.Name,
-		Description: stream.Description,
-		Loop:        stream.Loop,
-		CreatedAt:   stream.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		UpdatedAt:   stream.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-	})
+	WriteJSON(w, http.StatusOK, toStreamResponse(stream, nil))
 }
 
 func (h *Handler) deleteStream(w http.ResponseWriter, r *http.Request) {

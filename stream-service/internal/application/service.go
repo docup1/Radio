@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"log"
+	"strings"
 
 	"github.com/google/uuid"
 	goredis "github.com/redis/go-redis/v9"
@@ -57,6 +58,65 @@ func (s *Service) GetStream(ctx context.Context, id uuid.UUID) (*models.Stream, 
 // ListActiveStreams scans Redis for live streams (feed).
 func (s *Service) ListActiveStreams(ctx context.Context) ([]uuid.UUID, error) {
 	return svcredis.GetActiveStreamIDs(ctx, s.rdb)
+}
+
+// Feed returns active streams ordered by heartbeat freshness. When q is set the
+// result is filtered by trigram similarity on name/description (pg_trgm).
+// Each stream is annotated with the currently playing song id when available.
+type FeedItem struct {
+	Stream        *models.Stream
+	CurrentSongID *uuid.UUID
+}
+
+func (s *Service) Feed(ctx context.Context, q string, limit, offset int) ([]FeedItem, error) {
+	ids, err := svcredis.GetActiveStreamsByFreshness(ctx, s.rdb)
+	if err != nil {
+		return nil, err
+	}
+
+	var streams []*models.Stream
+	if strings.TrimSpace(q) != "" {
+		res, _, err := s.repos.Streams.SearchActive(ctx, ids, q, limit, offset)
+		if err != nil {
+			return nil, err
+		}
+		streams = res
+	} else {
+		res, err := s.repos.Streams.ListByIDs(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+		// Restore freshness order.
+		byID := make(map[uuid.UUID]*models.Stream, len(res))
+		for _, st := range res {
+			byID[st.ID] = st
+		}
+		streams = make([]*models.Stream, 0, len(ids))
+		for _, id := range ids {
+			if st, ok := byID[id]; ok {
+				streams = append(streams, st)
+			}
+		}
+		if offset >= len(streams) {
+			streams = nil
+		} else if offset > 0 {
+			streams = streams[offset:]
+		}
+		if limit > 0 && len(streams) > limit {
+			streams = streams[:limit]
+		}
+	}
+
+	items := make([]FeedItem, 0, len(streams))
+	for _, st := range streams {
+		item := FeedItem{Stream: st}
+		if status, err := s.q.Status(ctx, st.ID); err == nil && status.CurrentSongID != nil {
+			songID := *status.CurrentSongID
+			item.CurrentSongID = &songID
+		}
+		items = append(items, item)
+	}
+	return items, nil
 }
 
 func (s *Service) UpdateStream(ctx context.Context, id uuid.UUID, name, description string, loop bool) (*models.Stream, error) {

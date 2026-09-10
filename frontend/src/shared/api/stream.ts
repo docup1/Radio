@@ -9,7 +9,11 @@ import type {
 export const streamApi = {
   getMine: () => request<Stream>('GET', '/api/streams/'),
 
-  getFeed: () => request<Stream[]>('GET', '/api/streams/feed'),
+  getFeed: (q = '', limit = 20, offset = 0) =>
+    request<Stream[]>(
+      'GET',
+      `/api/streams/feed?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`,
+    ),
 
   get: (id: string) => request<Stream>('GET', `/api/streams/${id}`),
 

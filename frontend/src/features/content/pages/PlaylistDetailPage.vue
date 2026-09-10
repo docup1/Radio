@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import draggable from 'vuedraggable'
 import { content, imageURL } from '@/shared/api/content'
 import { usePlayer } from '@/features/content/composables/usePlayer'
+import { t } from '@/shared/i18n'
 import type { Playlist, Song } from '@/shared/api/types'
 
 const route = useRoute()
@@ -12,10 +13,7 @@ const { playSong } = usePlayer()
 
 const playlist = ref<Playlist | null>(null)
 const songs = ref<Song[]>([])
-const allSongs = ref<Song[]>([])
-const selectedSong = ref('')
 const error = ref('')
-const addMsg = ref('')
 const editingName = ref(false)
 const draftName = ref('')
 
@@ -24,10 +22,8 @@ async function load() {
     playlist.value = await content.getPlaylist(id)
     draftName.value = playlist.value.name
     songs.value = await content.listPlaylistSongs(id)
-    allSongs.value = await content.listSongs('mine', 100, 0)
-    if (allSongs.value.length) selectedSong.value = allSongs.value[0].id
   } catch (e: unknown) {
-    error.value = e instanceof Error ? e.message : 'Ошибка загрузки'
+    error.value = e instanceof Error ? e.message : t('songs.loadError')
   }
 }
 
@@ -40,30 +36,17 @@ async function saveRename() {
     playlist.value = await content.updatePlaylist(id, { name: draftName.value.trim() })
     editingName.value = false
   } catch (e: unknown) {
-    error.value = e instanceof Error ? e.message : 'Ошибка переименования'
+    error.value = e instanceof Error ? e.message : t('playlist.renameError')
   }
 }
 onMounted(load)
-
-async function onAdd() {
-  if (!selectedSong.value) return
-  addMsg.value = ''
-  try {
-    await content.addSongToPlaylist(id, selectedSong.value)
-    songs.value = await content.listPlaylistSongs(id)
-    addMsg.value = 'Добавлено'
-    setTimeout(() => (addMsg.value = ''), 1500)
-  } catch (e: unknown) {
-    addMsg.value = e instanceof Error ? e.message : 'Ошибка'
-  }
-}
 
 async function onRemove(songId: string) {
   try {
     await content.removeSongFromPlaylist(id, songId)
     songs.value = songs.value.filter((s) => s.id !== songId)
   } catch (e: unknown) {
-    error.value = e instanceof Error ? e.message : 'Ошибка удаления'
+    error.value = e instanceof Error ? e.message : t('playlist.removeError')
   }
 }
 
@@ -71,7 +54,7 @@ async function onDragEnd() {
   try {
     await Promise.all(songs.value.map((s, idx) => content.moveSongInPlaylist(id, s.id, idx)))
   } catch (e: unknown) {
-    error.value = e instanceof Error ? e.message : 'Ошибка сортировки'
+    error.value = e instanceof Error ? e.message : t('playlist.sortError')
     songs.value = await content.listPlaylistSongs(id)
   }
 }
@@ -83,27 +66,19 @@ function play(index: number) {
 
 <template>
   <div class="playlist-detail">
-    <RouterLink to="/content/playlists" class="back">← Плейлисты</RouterLink>
+    <RouterLink to="/profile" class="back">{{ t('player.back') }}</RouterLink>
 
     <h1 v-if="playlist && !editingName" @click="startRename" class="editable">
       {{ playlist.name }}
     </h1>
     <div v-else-if="editingName" class="rename">
       <input v-model="draftName" @keydown.enter="saveRename" @keydown.escape="editingName = false" />
-      <button class="primary" @click="saveRename">Сохранить</button>
-      <button class="secondary" @click="editingName = false">Отмена</button>
+      <button class="primary" @click="saveRename">{{ t('songs.save') }}</button>
+      <button class="secondary" @click="editingName = false">{{ t('common.cancel') }}</button>
     </div>
-    <h1 v-else class="muted">Плейлист</h1>
+    <h1 v-else class="muted">{{ t('playlist.title') }}</h1>
 
     <div v-if="error" class="error">{{ error }}</div>
-
-    <div class="add-row">
-      <select v-model="selectedSong" class="select">
-        <option v-for="s in allSongs" :key="s.id" :value="s.id">{{ s.name }}</option>
-      </select>
-      <button class="primary" @click="onAdd">Добавить песню</button>
-      <span v-if="addMsg" class="hint">{{ addMsg }}</span>
-    </div>
 
     <draggable
       v-model="songs"
@@ -114,22 +89,28 @@ function play(index: number) {
     >
       <template #item="{ element: s, index }">
         <div class="song-row">
-          <span class="drag" title="Перетащить">⠿</span>
+          <span class="drag" :title="t('playlist.drag')">⠿</span>
           <img v-if="s.image_id" :src="imageURL(s.image_id)" class="thumb" alt="" />
           <div class="info" @click="play(index)">
             <div class="name">{{ s.name }}</div>
             <div class="desc">{{ s.description }}</div>
           </div>
-          <button class="danger" @click="onRemove(s.id)">Убрать</button>
+          <button class="danger" @click="onRemove(s.id)">{{ t('playlist.remove') }}</button>
         </div>
       </template>
     </draggable>
 
-    <div v-if="!songs.length" class="muted">В плейлисте пока нет песен</div>
+    <div v-if="!songs.length" class="muted">{{ t('playlist.isEmpty') }}</div>
   </div>
 </template>
 
 <style scoped>
+.playlist-detail {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 104px 24px 96px;
+}
 .editable {
   cursor: pointer;
 }
@@ -162,20 +143,6 @@ function play(index: number) {
   text-decoration: none;
   font-size: 13px;
 }
-.add-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin: 16px 0;
-}
-.select {
-  flex: 1;
-  background: #0f1115;
-  border: 1px solid #2a2e3a;
-  color: var(--text);
-  padding: 8px;
-  border-radius: 8px;
-}
 .primary {
   background: var(--primary);
   color: #fff;
@@ -183,10 +150,6 @@ function play(index: number) {
   padding: 8px 14px;
   border-radius: 8px;
   cursor: pointer;
-}
-.hint {
-  color: var(--ok);
-  font-size: 13px;
 }
 .song-list {
   display: flex;

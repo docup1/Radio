@@ -11,7 +11,6 @@ import './styles/base.css'
 
 async function bootstrap() {
   const app = createApp(App)
-  app.use(router)
   app.use(PrimeVue, {
     theme: {
       preset: Aura,
@@ -22,6 +21,7 @@ async function bootstrap() {
   })
   app.use(ConfirmationService)
   await loadMe()
+  app.use(router)
   app.mount('#app')
 }
 

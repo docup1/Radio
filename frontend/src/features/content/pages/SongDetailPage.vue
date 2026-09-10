@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { content, imageURL } from '@/shared/api/content'
 import { usePlayer } from '@/features/content/composables/usePlayer'
+import { t } from '@/shared/i18n'
 import type { Song, Playlist } from '@/shared/api/types'
 import { user } from '@/shared/store/auth'
 
@@ -23,7 +24,7 @@ async function load() {
     playlists.value = await content.listPlaylists()
     if (playlists.value.length) selectedPlaylist.value = playlists.value[0].id
   } catch (e: unknown) {
-    error.value = e instanceof Error ? e.message : 'Ошибка загрузки'
+    error.value = e instanceof Error ? e.message : t('songs.loadError')
   }
 }
 onMounted(load)
@@ -33,12 +34,12 @@ function play() {
 }
 
 async function onDelete() {
-  if (!confirm('Удалить песню?')) return
+  if (!confirm(t('songs.deleteConfirm'))) return
   try {
     await content.deleteSong(id)
-    router.push('/content/songs')
+    router.push('/profile')
   } catch (e: unknown) {
-    error.value = e instanceof Error ? e.message : 'Ошибка удаления'
+    error.value = e instanceof Error ? e.message : t('playlist.removeError')
   }
 }
 
@@ -47,19 +48,23 @@ async function addToPlaylist() {
   addError.value = ''
   try {
     await content.addSongToPlaylist(selectedPlaylist.value, song.value.id)
-    addError.value = 'Добавлено'
+    addError.value = t('playlist.added')
     setTimeout(() => (addError.value = ''), 1500)
   } catch (e: unknown) {
-    addError.value = e instanceof Error ? e.message : 'Ошибка'
+    addError.value = e instanceof Error ? e.message : t('common.error')
   }
 }
 
 const isOwner = () => song.value && user.value && song.value.owner_id === user.value.id
+
+function onBack() {
+  router.back()
+}
 </script>
 
 <template>
   <div class="detail">
-    <RouterLink to="/content/songs" class="back">← Назад</RouterLink>
+    <button class="back" @click="onBack">{{ t('player.back') }}</button>
 
     <div v-if="error" class="error">{{ error }}</div>
 
@@ -70,40 +75,55 @@ const isOwner = () => song.value && user.value && song.value.owner_id === user.v
       <div class="meta">
         <h1>{{ song.name }}</h1>
         <p v-if="song.description" class="desc">{{ song.description }}</p>
-        <p class="muted">{{ song.is_public ? 'Публичная' : 'Личная' }}</p>
+        <p class="muted">{{ song.is_public ? t('songs.public') : t('songs.private') }}</p>
 
         <div class="actions">
-          <button class="primary" @click="play">▶ Играть</button>
+          <button class="primary" @click="play">▶ {{ t('player.play') }}</button>
           <RouterLink
             v-if="isOwner()"
             :to="`/content/songs/${song.id}/edit`"
             class="secondary"
-            >Редактировать</RouterLink
+            >{{ t('songs.edit') }}</RouterLink
           >
-          <button v-if="isOwner()" class="danger" @click="onDelete">Удалить</button>
+          <button v-if="isOwner()" class="danger" @click="onDelete">{{ t('common.delete') }}</button>
         </div>
 
         <div v-if="playlists.length" class="add-row">
           <select v-model="selectedPlaylist" class="select">
             <option v-for="p in playlists" :key="p.id" :value="p.id">{{ p.name }}</option>
           </select>
-          <button class="secondary" @click="addToPlaylist">В плейлист</button>
+          <button class="secondary" @click="addToPlaylist">{{ t('playlist.addSong') }}</button>
           <span v-if="addError" class="hint">{{ addError }}</span>
         </div>
       </div>
     </div>
 
-    <div v-else class="muted">Загрузка…</div>
+    <div v-else class="muted">{{ t('common.loading') }}</div>
   </div>
 </template>
 
 <style scoped>
+.detail {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 104px 24px 96px;
+}
 .back {
   display: inline-block;
   margin-bottom: 12px;
   color: var(--muted);
   text-decoration: none;
   font-size: 13px;
+  background: transparent;
+  border: 1px solid #333;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.back:hover {
+  color: var(--text);
+  border-color: #555;
 }
 .card {
   display: flex;

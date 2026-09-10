@@ -11,6 +11,8 @@ import (
 type StreamRepository interface {
 	Create(ctx context.Context, stream *models.Stream) error
 	GetByID(ctx context.Context, id uuid.UUID) (*models.Stream, error)
+	ListByIDs(ctx context.Context, ids []uuid.UUID) ([]*models.Stream, error)
+	SearchActive(ctx context.Context, ids []uuid.UUID, q string, limit, offset int) ([]*models.Stream, int, error)
 	Update(ctx context.Context, stream *models.Stream) error
 	Delete(ctx context.Context, id uuid.UUID) error
 }

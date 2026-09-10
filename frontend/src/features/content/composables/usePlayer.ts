@@ -1,6 +1,7 @@
 import { reactive } from "vue";
 import type { Song } from "@/shared/api/types";
 import { audioURL } from "@/shared/api/content";
+import { radio, closeRadio } from "@/shared/radio/store";
 
 export const state = reactive({
   current: null as Song | null,
@@ -67,6 +68,9 @@ function ensure(): HTMLAudioElement {
 }
 
 function playSong(song: Song, queue: Song[] = []) {
+  if (radio.streamId) {
+    closeRadio()
+  }
   const a = ensure();
   const q = queue.length ? [...queue] : [song];
   let idx = q.findIndex((s) => s.id === song.id);
@@ -156,3 +160,5 @@ function stop() {
 export function usePlayer() {
   return { state, playSong, toggle, next, prev, stop, seek, seekByRatio, formatTime };
 }
+
+export { stop as stopPlaying };

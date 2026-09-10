@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { content, imageURL } from '@/shared/api/content'
 import { useUpload } from '@/features/content/composables/useUpload'
+import { t } from '@/shared/i18n'
 
 const route = useRoute()
 const router = useRouter()
@@ -28,7 +29,7 @@ async function load() {
     isPublic.value = s.is_public
     existingImage.value = s.image_id ? imageURL(s.image_id) : null
   } catch (e: unknown) {
-    error.value = e instanceof Error ? e.message : 'Ошибка загрузки'
+    error.value = e instanceof Error ? e.message : t('songs.loadError')
   } finally {
     loading.value = false
   }
@@ -47,7 +48,7 @@ function onImage(e: Event) {
 async function submit() {
   error.value = ''
   if (!name.value.trim()) {
-    error.value = 'Название обязательно'
+    error.value = t('songs.nameRequired')
     return
   }
   submitting.value = true
@@ -68,7 +69,7 @@ async function submit() {
     await content.updateSong(id, patch as never)
     router.push(`/content/songs/${id}`)
   } catch (e: unknown) {
-    error.value = e instanceof Error ? e.message : 'Ошибка сохранения'
+    error.value = e instanceof Error ? e.message : t('songs.saveError')
   } finally {
     submitting.value = false
   }
@@ -77,48 +78,48 @@ async function submit() {
 
 <template>
   <div class="edit-page">
-    <RouterLink :to="`/content/songs/${id}`" class="back">← Назад</RouterLink>
-    <h1>Редактировать песню</h1>
+    <RouterLink :to="`/content/songs/${id}`" class="back">{{ t('player.back') }}</RouterLink>
+    <h1>{{ t('songs.editPage') }}</h1>
 
-    <div v-if="loading" class="muted">Загрузка…</div>
+    <div v-if="loading" class="muted">{{ t('common.loading') }}</div>
 
     <div v-else class="form">
       <label class="field">
-        <span>Название *</span>
+        <span>{{ t('songs.name') }} *</span>
         <input v-model="name" />
       </label>
 
       <label class="field">
-        <span>Описание</span>
+        <span>{{ t('songs.description') }}</span>
         <textarea v-model="description" rows="3" />
       </label>
 
       <label class="check">
         <input v-model="isPublic" type="checkbox" />
-        Публичная
+        {{ t('songs.public') }}
       </label>
 
       <div class="field">
-        <span>Заменить аудио (необязательно)</span>
+        <span>{{ t('songs.replaceAudio') }}</span>
         <input type="file" accept="audio/*" @change="onAudio" />
       </div>
 
       <div class="field">
-        <span>Заменить обложку (необязательно)</span>
+        <span>{{ t('songs.replaceImage') }}</span>
         <div v-if="existingImage && !imagePreview" class="current">
           <img :src="existingImage" class="thumb" alt="" />
-          <span class="muted">Текущая обложка</span>
+          <span class="muted">{{ t('songs.currentCover') }}</span>
         </div>
         <img v-if="imagePreview" :src="imagePreview" class="thumb" alt="" />
         <input type="file" accept="image/*" @change="onImage" />
       </div>
 
-      <div v-if="submitting" class="progress">Загрузка… {{ progress }}%</div>
+      <div v-if="submitting" class="progress">{{ t('songs.uploading') }} {{ progress }}%</div>
       <div v-if="error" class="error">{{ error }}</div>
 
       <div class="actions">
-        <button :disabled="submitting" class="primary" @click="submit">Сохранить</button>
-        <RouterLink :to="`/content/songs/${id}`" class="secondary">Отмена</RouterLink>
+        <button :disabled="submitting" class="primary" @click="submit">{{ t('songs.save') }}</button>
+        <RouterLink :to="`/content/songs/${id}`" class="secondary">{{ t('common.cancel') }}</RouterLink>
       </div>
     </div>
   </div>
@@ -133,7 +134,10 @@ async function submit() {
   font-size: 13px;
 }
 .edit-page {
-  max-width: 640px;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 104px 24px 96px;
 }
 .form {
   background: var(--surface);

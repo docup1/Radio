@@ -2,12 +2,13 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { radio, isOwnerFor, start, stop, skip, resume } from '@/shared/radio/store'
+import { t } from '@/shared/i18n'
 
 defineProps<{ id: string }>()
 const router = useRouter()
 
 const isOwner = computed(() => isOwnerFor(radio.streamId))
-const name = computed(() => radio.stream?.name ?? radio.streamId ?? 'Стрим')
+const name = computed(() => radio.stream?.name ?? radio.streamId ?? t('profile.tab.stream'))
 const description = computed(() => radio.stream?.description ?? '')
 const songLabel = computed(() => radio.song?.name ?? radio.song?.id ?? '')
 const isPlaying = computed(() => radio.phase === 'playing' && radio.isActive)
@@ -15,15 +16,15 @@ const isPlaying = computed(() => radio.phase === 'playing' && radio.isActive)
 const statusLabel = computed(() => {
   switch (radio.phase) {
     case 'connecting':
-      return 'Подключение…'
+      return t('player.status.connecting')
     case 'playing':
-      return radio.isActive ? 'Играет' : 'Пауза'
+      return radio.isActive ? t('player.status.playing') : t('player.status.paused')
     case 'ended':
-      return 'Стрим завершён'
+      return t('player.status.ended')
     case 'stopped':
-      return 'Остановлен'
+      return t('player.status.stopped')
     case 'error':
-      return radio.error || 'Ошибка'
+      return radio.error || t('player.status.error')
     default:
       return ''
   }
@@ -38,7 +39,7 @@ function onBack() {
 
 <template>
   <div class="stream-player">
-    <button class="stream-player__back" @click="onBack">&#8592; Назад</button>
+    <button class="stream-player__back" @click="onBack">{{ t('player.back') }}</button>
 
     <div class="stream-player__content">
       <div
@@ -49,7 +50,7 @@ function onBack() {
       <h1 class="stream-player__name">{{ name }}</h1>
       <p v-if="description" class="stream-player__desc">{{ description }}</p>
       <p class="stream-player__song" :class="{ 'stream-player__song--empty': !songLabel }">
-        {{ songLabel || '— нет песен в очереди —' }}
+        {{ songLabel || t('player.emptySong') }}
       </p>
 
       <div class="stream-player__actions">
@@ -58,65 +59,22 @@ function onBack() {
           class="stream-player__play"
           @click="resume"
         >
-          &#9654; Включить звук
+          &#9654; {{ t('player.resume') }}
         </button>
         <template v-else-if="isOwner">
           <button v-if="!radio.isActive" class="stream-player__play" @click="start">
-            &#9654; Запустить стрим
+            &#9654; {{ t('stream.start') }}
           </button>
           <template v-else>
-            <button class="stream-player__ctrl" @click="stop">&#9632; Стоп</button>
-            <button class="stream-player__ctrl" @click="skip">&#9197; Скип</button>
+            <button class="stream-player__ctrl" @click="stop">{{ t('stream.stop') }}</button>
+            <button class="stream-player__ctrl" @click="skip">{{ t('stream.skip') }}</button>
           </template>
         </template>
         <span v-else class="stream-player__status">{{ statusLabel }}</span>
       </div>
-
-      <div v-if="radio.feed.length > 0" class="stream-player__feed">
-        <div v-for="(item, i) in radio.feed" :key="item.at + '-' + i" class="feed-item">
-          <span class="feed-item__icon" :class="`feed-item__icon--${item.type}`">
-            {{ iconFor(item.type) }}
-          </span>
-          <span class="feed-item__text">
-            {{ labelFor(item) }}
-          </span>
-        </div>
-      </div>
     </div>
   </div>
 </template>
-
-<script lang="ts">
-function iconFor(type: string): string {
-  switch (type) {
-    case 'song':
-      return '♫'
-    case 'song_ended':
-      return '▶'
-    case 'stream_ended':
-      return '●'
-    case 'stream_stopped':
-      return '■'
-    default:
-      return '⚠'
-  }
-}
-
-function labelFor(item: { type: string; songName?: string; songId?: string; message?: string }): string {
-  switch (item.type) {
-    case 'song':
-      return item.songName ? `Играет: ${item.songName}` : 'Следующая песня'
-    case 'song_ended':
-      return item.songName ? `${item.songName} — закончилась` : 'Песня закончилась'
-    case 'stream_ended':
-      return item.message ?? 'Стрим завершён'
-    case 'stream_stopped':
-      return 'Стрим остановлен'
-    default:
-      return item.message ?? 'Ошибка'
-  }
-}
-</script>
 
 <style scoped>
 .stream-player {
@@ -223,36 +181,5 @@ function labelFor(item: { type: string; songName?: string; songId?: string; mess
 .stream-player__status {
   font-size: 14px;
   color: var(--muted);
-}
-.stream-player__feed {
-  width: 100%;
-  max-width: 420px;
-  margin-top: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.feed-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--muted);
-}
-.feed-item__icon {
-  width: 20px;
-  text-align: center;
-  flex-shrink: 0;
-}
-.feed-item__icon--song {
-  color: var(--primary);
-}
-.feed-item__icon--error {
-  color: #ef4444;
-}
-.feed-item__text {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 </style>
