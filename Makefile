@@ -3,7 +3,7 @@ GOARCH := $(shell uname -m | sed -e 's/^x86_64$$/amd64/' -e 's/^aarch64$$/arm64/
 FRONTEND_DIR := frontend
 GATEWAY_DIST := gateway/dist
 
-.PHONY: dev prod build down clean \
+.PHONY: dev prod build down clean test \
          front-install front-dev front-build front-dist \
          user-dev cs-build cs-dev cs-down \
          ss-build ss-dev snd-build snd-dev \
@@ -91,6 +91,12 @@ prod: build cs-build ss-build snd-build gw-build front-dist
 
 down:
 	docker compose down
+
+# ---------- tests ----------
+test:
+	docker compose -f tests/docker-compose.yaml build
+	docker compose -f tests/docker-compose.yaml up --abort-on-container-exit tests
+	docker compose -f tests/docker-compose.yaml down
 
 clean:
 	rm -rf user-service/bin content-service/bin stream-service/bin sender-service/bin gateway/bin

@@ -1,0 +1,11 @@
+# Isolated docker compose project for running the whole test suite in a
+# throwaway container. It does not share networks or namespaces with the main
+# docker-compose.yaml, so service ports are never touched. Run via:
+#
+#	make test
+#
+services:
+  tests:
+    build:
+      context: ..
+      dockerfile: tests/Dockerfile
