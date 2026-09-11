@@ -70,6 +70,7 @@ let watchdogTimer = 0
 let appendErrors = 0
 let pendingRemove: { start: number; end: number } | null = null
 let resetPending = false
+let resetToStart = false
 let songFetchSeq = 0
 
 const appendQueue: ArrayBuffer[] = []
@@ -331,6 +332,7 @@ function resetPlayback() {
   if (useFallback) {
     chunks = []
     totalBytes = 0
+    resetToStart = true
     clearTimeout(blobRefreshTimer)
     blobRefreshTimer = 0
     if (blobUrl) {
@@ -342,12 +344,25 @@ function resetPlayback() {
   }
   appendQueue.length = 0
   pendingRemove = null
-  if (!sourceBuffer) return
-  if (sourceBuffer.updating) {
+  if (sourceBuffer && sourceBuffer.updating) {
     resetPending = true
-    return
+  } else if (sourceBuffer) {
+    doReset()
   }
-  doReset()
+  restartPosition()
+}
+
+// restartPosition rewinds the playhead to the start of the new song. Without
+// this the media element keeps sitting on the old track's time code while the
+// new song is appended from 0, so it starves and the stream goes silent.
+function restartPosition() {
+  if (!audio || useFallback) return
+  try {
+    audio.currentTime = 0
+  } catch {
+    // ignore
+  }
+  audio.play().catch(handlePlayBlock)
 }
 
 function setupMse() {
@@ -541,14 +556,15 @@ function fallbackChunk(data: ArrayBuffer) {
 function refreshBlob() {
   if (!audio || chunks.length === 0) return
   const wasPlaying = !audio.paused
-  const currentTime = audio.currentTime
+  let seekTo = resetToStart ? 0 : audio.currentTime
+  resetToStart = false
 
   const blob = new Blob(chunks, { type: 'audio/mpeg' })
   if (blobUrl) URL.revokeObjectURL(blobUrl)
   blobUrl = URL.createObjectURL(blob)
   audio.src = blobUrl
-  if (currentTime > 0 && isFinite(currentTime)) {
-    audio.currentTime = currentTime
+  if (seekTo > 0 && isFinite(seekTo)) {
+    audio.currentTime = seekTo
   }
   if (wasPlaying) {
     audio.play().catch(handlePlayBlock)
