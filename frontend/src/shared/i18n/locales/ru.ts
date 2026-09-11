@@ -94,7 +94,6 @@ const ru = {
   'settings.saving': 'Сохранение…',
   'settings.saved': 'Сохранено',
   'settings.logout': 'Выйти',
-  'settings.deleteAccount': 'Удалить аккаунт',
   'settings.deleteConfirm': 'Удалить аккаунт? Это действие необратимо.',
   'settings.passwordConfirm': 'Пароль обновлён',
 

@@ -39,5 +39,4 @@ export const api = {
   logout: () => request<void>('POST', '/api/auth/logout'),
   me: () => request<User>('GET', '/api/auth/me'),
   changePassword: (p: PasswordUpdate) => request<void>('POST', '/api/auth/password', p),
-  deleteAccount: () => request<void>('DELETE', '/api/auth/me'),
 }

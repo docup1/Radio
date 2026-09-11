@@ -43,8 +43,3 @@ export async function logout(): Promise<void> {
 export async function changePassword(p: PasswordUpdate): Promise<void> {
   await api.changePassword(p)
 }
-
-export async function deleteAccount(): Promise<void> {
-  await api.deleteAccount()
-  state.user = null
-}

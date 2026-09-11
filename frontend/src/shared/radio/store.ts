@@ -1,6 +1,6 @@
 import { reactive } from 'vue'
 import { streamApi } from '@/shared/api/stream'
-import { content } from '@/shared/api/content'
+import { content, audioURL } from '@/shared/api/content'
 import { user } from '@/shared/store/auth'
 import type { Stream } from '@/shared/api/types'
 
@@ -59,8 +59,6 @@ let sourceBuffer: SourceBuffer | null = null
 let audioCtx: AudioContext | null = null
 let analyser: AnalyserNode | null = null
 let animFrame = 0
-let blobUrl: string | null = null
-let blobRefreshTimer = 0
 let reconnectTimer = 0
 let attempts = 0
 let wanted = false
@@ -70,12 +68,10 @@ let watchdogTimer = 0
 let appendErrors = 0
 let pendingRemove: { start: number; end: number } | null = null
 let resetPending = false
-let resetToStart = false
+let wantAudio = false
 let songFetchSeq = 0
 
 const appendQueue: ArrayBuffer[] = []
-let chunks: ArrayBuffer[] = []
-let totalBytes = 0
 
 export function isOwnerFor(streamId: string | null): boolean {
   return !!streamId && user.value?.id === streamId
@@ -160,6 +156,7 @@ export function start() {
 }
 
 export function stop() {
+  wantAudio = false
   send({ type: 'stop' })
 }
 
@@ -234,6 +231,7 @@ function handleMessage(msg: Record<string, unknown>) {
     case 'state': {
       const d = (msg.data ?? {}) as Record<string, unknown>
       radio.isActive = !!d.is_active
+      wantAudio = radio.isActive
       radio.queueLength = Number(d.queue_length ?? 0) || 0
       radio.currentItemId = typeof d.current_item_id === 'string' ? d.current_item_id : null
       if (radio.phase === 'connecting') {
@@ -245,10 +243,12 @@ function handleMessage(msg: Record<string, unknown>) {
     case 'song': {
       if (typeof msg.songId === 'string') {
         fetchSongMeta(msg.songId)
+        radio.song = { id: msg.songId }
       }
       radio.phase = 'playing'
       radio.isActive = true
-      resetPlayback()
+      wantAudio = true
+      resetPlayback(typeof msg.songId === 'string' ? msg.songId : undefined)
       break
     }
     case 'song_ended':
@@ -324,30 +324,35 @@ function hookAudioAnalyser() {
   analyser.connect(audioCtx.destination)
 }
 
-function resetPlayback() {
+function resetPlayback(songId?: string) {
   if (!audio) {
     setupMse()
-    return
+    if (!useFallback) return
+    // fallback: fall through to source assignment on the fresh element
   }
   if (useFallback) {
-    chunks = []
-    totalBytes = 0
-    resetToStart = true
-    clearTimeout(blobRefreshTimer)
-    blobRefreshTimer = 0
-    if (blobUrl) {
-      URL.revokeObjectURL(blobUrl)
-      blobUrl = null
+    if (!songId) return
+    wantAudio = true
+    try {
+      audio.currentTime = 0
+    } catch {
+      // ignore
     }
-    if (audio) audio.pause()
+    if (audio.src !== audioURL(songId)) {
+      audio.src = audioURL(songId)
+    }
+    audio.play().catch(handlePlayBlock)
     return
   }
   appendQueue.length = 0
   pendingRemove = null
-  if (sourceBuffer && sourceBuffer.updating) {
-    resetPending = true
-  } else if (sourceBuffer) {
-    doReset()
+  if (sourceBuffer) {
+    // A brand-new MediaSource per announced song: SourceBuffers hold the
+    // previous track's frames, and removing/rebuilding them in-place leaves the
+    // element stuck — the next song's chunks never reach the buffer and the
+    // stream goes silent right after the first track.
+    disposeMseEngine()
+    setupMse()
   }
   restartPosition()
 }
@@ -363,6 +368,39 @@ function restartPosition() {
     // ignore
   }
   audio.play().catch(handlePlayBlock)
+}
+
+// disposeMseEngine tears the MSE pipeline down but keeps the shared AudioContext.
+// setupMse() rebuilds it with a clean element and MediaSource.
+function disposeMseEngine() {
+  clearInterval(drainTimer)
+  drainTimer = 0
+  clearInterval(watchdogTimer)
+  watchdogTimer = 0
+  appendQueue.length = 0
+  pendingRemove = null
+  resetPending = false
+  appendErrors = 0
+
+  if (sourceBuffer) {
+    sourceBuffer.removeEventListener('error', onSourceBufferError)
+    sourceBuffer = null
+  }
+  if (mediaSource) {
+    try {
+      if (mediaSource.readyState === 'open') mediaSource.endOfStream()
+    } catch {
+      // ignore
+    }
+    mediaSource = null
+  }
+  if (audio) {
+    audio.pause()
+    audio.src = ''
+    audio.load()
+    audio.remove()
+    audio = null
+  }
 }
 
 function setupMse() {
@@ -422,6 +460,12 @@ function setupFallback() {
   document.body.appendChild(audio)
   hookAudioAnalyser()
 
+  // Browsers without MSE (Chrome/Firefox) cannot stream raw MPEG through a
+  // SourceBuffer or a mutable blob: rebuilding the object URL never lets the
+  // decoder progress past the first frames. Instead we play each announced
+  // song straight from the static audio endpoint — one src per song, replaced
+  // on every track change. The WebSocket stays authoritative for skip/end/stop.
+
   audio.addEventListener('error', () => {
     if (radio.phase !== 'idle') {
       radio.phase = 'error'
@@ -429,11 +473,12 @@ function setupFallback() {
     }
   })
 
-  try {
-    audio.play().catch(handlePlayBlock)
-  } catch {
-    // ignore
-  }
+  audio.addEventListener('ended', () => {
+    // Natural end of the current file: wait for the next 'song' announce.
+    // The watchdog must not auto-restart the same track.
+    audio?.pause()
+  })
+  startPulse()
 }
 
 function handlePlayBlock(err: unknown) {
@@ -501,6 +546,7 @@ function pump() {
   try {
     sourceBuffer.appendBuffer(chunk)
     appendErrors = 0
+    catchUpToLive()
   } catch {
     appendErrors++
     if (appendErrors > 3) {
@@ -512,12 +558,37 @@ function pump() {
 }
 
 function watchdog() {
-  if (useFallback || !audio || audio.paused) return
+  if (!audio) return
+  // Failsafe for the fallback: if the stream is expected to play but the
+  // element got paused (e.g. after a song switch or an interrupted autoplay),
+  // nudge it back into playback. Never restart a track that already ended on
+  // its own — the next 'song' announce plays the next file.
+  if (wantAudio && audio.paused && !audio.ended) {
+    audio.play().catch(handlePlayBlock)
+  }
+  if (useFallback || audio.paused) return
   if (audio.readyState === 2 && mediaSource?.readyState === 'open') {
     audio.play().catch(handlePlayBlock)
   }
   if (sourceBuffer && !sourceBuffer.updating && radio.resumeRequired) {
     audio.play().catch(handlePlayBlock)
+  }
+}
+
+// catchUpToLive moves the playhead to the live buffered start after an append:
+// a listener joining mid-song only ever receives the tail, so stalling at 0
+// would keep them silent. The media stream for the current song always starts
+// its own timeline at 0, so early joins are left untouched.
+function catchUpToLive() {
+  if (!audio || !sourceBuffer) return
+  if (sourceBuffer.buffered.length === 0) return
+  const liveStart = sourceBuffer.buffered.start(0)
+  if (liveStart > 0.4 && liveStart > 0 && Math.abs(audio.currentTime - liveStart) > 1) {
+    try {
+      audio.currentTime = liveStart
+    } catch {
+      // ignore
+    }
   }
 }
 
@@ -530,45 +601,18 @@ function onSourceBufferError() {
   }
 }
 
-function handleChunk(data: ArrayBuffer) {
+function handleChunk(_data: ArrayBuffer) {
   if (useFallback) {
-    fallbackChunk(data)
+    // Fallback plays announced songs from the static audio endpoint; the
+    // real-time-paced chunks are irrelevant here.
     return
   }
+  const data = _data
   if (appendQueue.length > MAX_PENDING) {
     appendQueue.length = 0
   }
   appendQueue.push(data)
   pump()
-}
-
-function fallbackChunk(data: ArrayBuffer) {
-  chunks.push(data)
-  totalBytes += data.byteLength
-  if (!blobRefreshTimer) {
-    blobRefreshTimer = window.setTimeout(() => {
-      blobRefreshTimer = 0
-      refreshBlob()
-    }, 500)
-  }
-}
-
-function refreshBlob() {
-  if (!audio || chunks.length === 0) return
-  const wasPlaying = !audio.paused
-  let seekTo = resetToStart ? 0 : audio.currentTime
-  resetToStart = false
-
-  const blob = new Blob(chunks, { type: 'audio/mpeg' })
-  if (blobUrl) URL.revokeObjectURL(blobUrl)
-  blobUrl = URL.createObjectURL(blob)
-  audio.src = blobUrl
-  if (seekTo > 0 && isFinite(seekTo)) {
-    audio.currentTime = seekTo
-  }
-  if (wasPlaying) {
-    audio.play().catch(handlePlayBlock)
-  }
 }
 
 function startPulse() {
@@ -592,8 +636,6 @@ function stopPulse() {
 }
 
 function teardownEngine() {
-  clearTimeout(blobRefreshTimer)
-  blobRefreshTimer = 0
   clearTimeout(reconnectTimer)
   reconnectTimer = 0
   clearInterval(drainTimer)
@@ -605,6 +647,7 @@ function teardownEngine() {
   pendingRemove = null
   resetPending = false
   appendErrors = 0
+  wantAudio = false
 
   if (sourceBuffer) {
     sourceBuffer.removeEventListener('error', onSourceBufferError)
@@ -626,10 +669,6 @@ function teardownEngine() {
   if (mediaSource) {
     mediaSource = null
   }
-  if (blobUrl) {
-    URL.revokeObjectURL(blobUrl)
-    blobUrl = null
-  }
 
   if (audioCtx) {
     audioCtx.close().catch(() => {})
@@ -638,8 +677,6 @@ function teardownEngine() {
   }
   stopPulse()
 
-  chunks = []
-  totalBytes = 0
   useFallback = false
   radio.resumeRequired = false
 }

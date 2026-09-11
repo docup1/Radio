@@ -1,21 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useConfirm } from 'primevue/useconfirm'
-import ConfirmDialog from 'primevue/confirmdialog'
 import { Card, Button, TextField } from '@/components'
 import { useStreams } from '@/features/streams/composables/useStreams'
-import {
-  user,
-  logout,
-  changePassword,
-  deleteAccount,
-} from '@/shared/store/auth'
+import { user, logout, changePassword } from '@/shared/store/auth'
 import { setLocale, t, type Locale } from '@/shared/i18n'
 import { ApiError } from '@/shared/api/client'
 
 const router = useRouter()
-const confirm = useConfirm()
 
 const streamId = computed(() => user.value?.id ?? '')
 const { stream, loading: streamLoading, get, update } = useStreams()
@@ -70,20 +62,6 @@ async function onChangePassword() {
   } catch (e) {
     err.value = e instanceof ApiError ? e.message : t('common.error')
   }
-}
-
-function onDelete() {
-  confirm.require({
-    message: t('settings.deleteConfirm'),
-    accept: async () => {
-      try {
-        await deleteAccount()
-        await router.push('/login')
-      } catch (e) {
-        err.value = e instanceof ApiError ? e.message : t('common.error')
-      }
-    },
-  })
 }
 
 function onLanguageChange(e: Event) {
@@ -182,12 +160,7 @@ async function onSaveStream() {
       <section class="section">
         <div v-if="msg" class="ok">{{ msg }}</div>
         <div v-if="err" class="error">{{ err }}</div>
-        <div class="row-actions">
-          <Button :label="t('settings.deleteAccount')" variant="danger" @click="onDelete" />
-        </div>
       </section>
-
-      <ConfirmDialog />
     </Card>
   </div>
 </template>
