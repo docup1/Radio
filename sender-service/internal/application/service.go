@@ -248,10 +248,13 @@ func (s *Service) serveStream(ctx context.Context, streamID uuid.UUID, sh *Strea
 	// delivered. Kept small so song changes and stream stop stay responsive.
 	const pacingLead = 800 * time.Millisecond
 
-	// anchor is the playback position (parser.Dur) at the start of the next
-	// chunk. Crossed only by real-time pacing, so a chunk covering audio at
-	// position P is sent at wall-clock songStart+P-lead.
-	anchor := time.Duration(0)
+	// emittedDur is the playback position where the next chunk's audio begins
+	// (== the total duration of all audio emitted so far). A chunk covering
+	// audio at position P is sent at wall-clock songStart+P-lead, so the client
+	// keeps the whole chunk as lead after the first one.
+	emittedDur := time.Duration(0)
+	// pendingDur is the duration of the frames currently buffered in pending.
+	pendingDur := time.Duration(0)
 
 	emit := func(force bool) {
 		if len(pending) == 0 || (!force && int64(len(pending)) < s.cfg.ChunkSize) {
@@ -261,20 +264,21 @@ func (s *Service) serveStream(ctx context.Context, streamID uuid.UUID, sh *Strea
 			return
 		}
 		if !force {
-			if d := time.Until(songStart.Add(anchor - pacingLead)); d > 0 {
-				log.Printf("[sender] pacing stream=%s song=%s anchor=%s sleep=%s", streamID, songID, anchor.Round(time.Millisecond), d.Round(time.Millisecond))
+			if d := time.Until(songStart.Add(emittedDur - pacingLead)); d > 0 {
+				log.Printf("[sender] pacing stream=%s song=%s at=%s sleep=%s", streamID, songID, emittedDur.Round(time.Millisecond), d.Round(time.Millisecond))
 				select {
 				case <-ctx.Done():
 					return
 				case <-time.After(d):
 				}
 			}
-			anchor = parser.Dur
 		}
 		sh.AddChunk(pending)
 		sh.mu.Lock()
 		sh.BytesSent += int64(len(pending))
 		sh.mu.Unlock()
+		emittedDur += pendingDur
+		pendingDur = 0
 		pending = nil
 	}
 
@@ -319,6 +323,7 @@ fetch:
 		frames := parser.Feed(result.Data)
 		for _, f := range frames {
 			pending = append(pending, f...)
+			pendingDur += media.FrameDuration(f)
 			emit(false)
 		}
 

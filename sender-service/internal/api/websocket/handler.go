@@ -87,11 +87,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	listenerID := atomic.AddInt64(&listenerCounter, 1)
 	l := &application.Listener{
-		ID:        strconv.FormatInt(listenerID, 10),
-		Ch:        make(chan []byte, 1024),
-		ControlCh: make(chan string, 64),
-		OwnerID:   r.Header.Get("X-Owner-ID"),
-		Hub:       sh,
+		ID:      strconv.FormatInt(listenerID, 10),
+		Send:    make(chan application.OutMsg, 1024),
+		OwnerID: r.Header.Get("X-Owner-ID"),
+		Hub:     sh,
 	}
 
 	sh.Subscribe(l)
@@ -122,27 +121,28 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// Write loop: multiplex binary chunks and text control messages.
+	// Write loop: the unified listener channel preserves FIFO order between
+	// control frames and audio chunks (a "song" announce always precedes its
+	// chunks), so the client never sees a new song's audio before its announce.
 	go func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		for {
 			select {
-			case chunk, ok := <-l.Ch:
+			case m, ok := <-l.Send:
 				if !ok {
 					return
 				}
-				if err := conn.WriteMessage(websocket.BinaryMessage, chunk); err != nil {
-					log.Printf("[ws] write error (stream=%s listener=%s): %v", streamID, l.ID, err)
-					return
-				}
-			case msg, ok := <-l.ControlCh:
-				if !ok {
-					return
-				}
-				if err := conn.WriteMessage(websocket.TextMessage, []byte(msg)); err != nil {
-					log.Printf("[ws] write error (stream=%s listener=%s): %v", streamID, l.ID, err)
-					return
+				if m.Chunk != nil {
+					if err := conn.WriteMessage(websocket.BinaryMessage, m.Chunk); err != nil {
+						log.Printf("[ws] write error (stream=%s listener=%s): %v", streamID, l.ID, err)
+						return
+					}
+				} else {
+					if err := conn.WriteMessage(websocket.TextMessage, []byte(m.Ctrl)); err != nil {
+						log.Printf("[ws] write error (stream=%s listener=%s): %v", streamID, l.ID, err)
+						return
+					}
 				}
 			case <-ctx.Done():
 				return

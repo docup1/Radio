@@ -41,7 +41,7 @@ func synthFrame(bitrateIdx, sampleRateIdx, padding int) []byte {
 
 func frameDur(t *testing.T, b []byte) time.Duration {
 	t.Helper()
-	d := frameDuration(b)
+	d := FrameDuration(b)
 	if d <= 0 {
 		t.Fatalf("frameDuration returned non-positive %v", d)
 	}

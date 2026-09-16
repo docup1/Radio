@@ -63,7 +63,7 @@ func (p *MP3Parser) Feed(data []byte) [][]byte {
 		}
 
 		frames = append(frames, append([]byte(nil), p.buf[:flen]...))
-		p.Dur += frameDuration(p.buf)
+		p.Dur += FrameDuration(p.buf)
 		p.buf = p.buf[flen:]
 	}
 	return frames
@@ -77,9 +77,10 @@ func (p *MP3Parser) Flush() []byte {
 	return tail
 }
 
-// frameDuration returns the playback duration of the MPEG audio frame
-// starting at b[0:4] (samples per frame / sample rate).
-func frameDuration(b []byte) time.Duration {
+// FrameDuration returns the playback duration of the MPEG audio frame
+// starting at b[0:4] (samples per frame / sample rate). It is the exported
+// counterpart used by the streaming loop to track chunk pacing positions.
+func FrameDuration(b []byte) time.Duration {
 	ver := (b[1] >> 3) & 0x03 // 0=MPEG2.5, 1=reserved, 2=MPEG2, 3=MPEG1
 	layer := (b[1] >> 1) & 0x03
 	if ver == 1 {

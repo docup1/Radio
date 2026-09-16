@@ -70,6 +70,7 @@ let pendingRemove: { start: number; end: number } | null = null
 let resetPending = false
 let wantAudio = false
 let songFetchSeq = 0
+let activeSongId: string | null = null
 
 const appendQueue: ArrayBuffer[] = []
 
@@ -92,6 +93,7 @@ export async function openStream(streamId: string) {
   radio.resumeRequired = false
   radio.isActive = false
   radio.currentItemId = null
+  activeSongId = null
 
   try {
     localStorage.setItem(STORAGE_KEY, streamId)
@@ -149,6 +151,7 @@ export function closeRadio() {
   radio.error = ''
   radio.resumeRequired = false
   radio.phase = 'idle'
+  activeSongId = null
 }
 
 export function start() {
@@ -325,9 +328,26 @@ function hookAudioAnalyser() {
 }
 
 function resetPlayback(songId?: string) {
+  // A re-announce of the song that is already playing (repeat in the queue,
+  // or a duplicate announce after a reconnect): the live buffer still holds
+  // this track's frames, so rebuilding the engine here would reset the
+  // timeline and drop the buffered tail — an audible gap at an identical seam.
+  // Keep the buffer flowing and just make sure playback is running.
+  if (songId && activeSongId === songId && audio && mediaSource) {
+    wantAudio = true
+    audio.play().catch(handlePlayBlock)
+    return
+  }
+  activeSongId = songId ?? null
   if (!audio) {
     setupMse()
-    if (!useFallback) return
+    if (!useFallback) {
+      // Engine was torn down (e.g. a mid-song reconnect): the chunks already
+      // queued below belong to the announced song and are preserved — a fresh
+      // MediaSource drains them as soon as it opens, so playback resumes from
+      // the live tail instead of stalling until the next chunk.
+      return
+    }
     // fallback: fall through to source assignment on the fresh element
   }
   if (useFallback) {

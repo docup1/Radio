@@ -18,23 +18,73 @@ func newTestListener(sh *StreamHub) *Listener {
 		sh.MaxCap = 16
 	}
 	return &Listener{
-		ID:        uuid.NewString(),
-		Ch:        make(chan []byte, 64),
-		ControlCh: make(chan string, 64),
-		Hub:       sh,
+		ID:   uuid.NewString(),
+		Send: make(chan OutMsg, 64),
+		Hub:  sh,
 	}
 }
 
+// recvChunk reads the next audio chunk from the unified Send channel.
+func recvChunk(t *testing.T, l *Listener) []byte {
+	t.Helper()
+	m, ok := <-l.Send
+	if !ok {
+		t.Fatal("listener channel closed unexpectedly")
+	}
+	if m.Chunk == nil {
+		t.Fatalf("expected audio chunk, got control frame: %s", m.Ctrl)
+	}
+	return m.Chunk
+}
+
+// recvControl reads the next control message from the unified Send channel.
+func recvControl(t *testing.T, l *Listener) map[string]string {
+	t.Helper()
+	m, ok := <-l.Send
+	if !ok {
+		t.Fatal("listener channel closed unexpectedly")
+	}
+	if m.Ctrl == "" {
+		t.Fatal("expected control frame, got audio chunk")
+	}
+	var out map[string]string
+	_ = json.Unmarshal([]byte(m.Ctrl), &out)
+	return out
+}
+
+// drainControl returns all pending control messages on the Send channel.
 func drainControl(l *Listener) []map[string]string {
 	var out []map[string]string
 	for {
 		select {
-		case msg := <-l.ControlCh:
-			var m map[string]string
-			_ = json.Unmarshal([]byte(msg), &m)
-			out = append(out, m)
+		case m := <-l.Send:
+			if m.Ctrl == "" {
+				continue // skip audio chunks
+			}
+			var msg map[string]string
+			_ = json.Unmarshal([]byte(m.Ctrl), &msg)
+			out = append(out, msg)
 		default:
 			return out
+		}
+	}
+}
+
+// drainSend returns all pending messages (chunk or control) from the Send
+// channel, separating them into audio chunks and control frames.
+func drainSend(l *Listener) (chunks [][]byte, ctrls []map[string]string) {
+	for {
+		select {
+		case m := <-l.Send:
+			if m.Chunk != nil {
+				chunks = append(chunks, m.Chunk)
+			} else if m.Ctrl != "" {
+				var msg map[string]string
+				_ = json.Unmarshal([]byte(m.Ctrl), &msg)
+				ctrls = append(ctrls, msg)
+			}
+		default:
+			return
 		}
 	}
 }
@@ -86,10 +136,10 @@ func TestAddChunkFanOut(t *testing.T) {
 	sh.AddChunk([]byte("data2"))
 
 	for _, l := range []*Listener{l1, l2} {
-		if got := <-l.Ch; string(got) != "data1" {
+		if got := recvChunk(t, l); string(got) != "data1" {
 			t.Fatalf("listener got %q first, want data1", got)
 		}
-		if got := <-l.Ch; string(got) != "data2" {
+		if got := recvChunk(t, l); string(got) != "data2" {
 			t.Fatalf("listener got %q last, want data2", got)
 		}
 	}
@@ -108,8 +158,10 @@ func TestAddChunkIgnoredWhenInactive(t *testing.T) {
 	}
 	sh.mu.Unlock()
 	select {
-	case <-l.Ch:
-		t.Fatal("chunk delivered while stream inactive")
+	case m, ok := <-l.Send:
+		if ok && m.Chunk != nil {
+			t.Fatal("chunk delivered while stream inactive")
+		}
 	default:
 	}
 }
@@ -119,13 +171,12 @@ func TestAddChunkSlowListenerDrop(t *testing.T) {
 	sh := &StreamHub{MaxCap: 16, Active: true}
 	sh.Listeners = make(map[*Listener]struct{})
 	l := &Listener{
-		ID:        uuid.NewString(),
-		Ch:        make(chan []byte, 1),
-		ControlCh: make(chan string, 1),
-		Hub:       sh,
+		ID:   uuid.NewString(),
+		Send: make(chan OutMsg, 1),
+		Hub:  sh,
 	}
 	sh.Subscribe(l)
-	l.Ch <- []byte("full")
+	l.Send <- OutMsg{Chunk: []byte("full")}
 	for i := 0; i < 100; i++ {
 		sh.AddChunk([]byte{byte(i)})
 	}
@@ -141,15 +192,18 @@ func TestSubscribeBackfillAndAnnounce(t *testing.T) {
 	l := newTestListener(sh)
 	sh.Subscribe(l)
 
-	if got := <-l.Ch; string(got) != "latest" {
+	// The unified ordered channel guarantees the backfill chunk arrives BEFORE
+	// the song announce — the client must never receive a chunk for a song it
+	// has not been told about yet.
+	if got := recvChunk(t, l); string(got) != "latest" {
 		t.Fatalf("backfill = %q, want latest chunk", got)
 	}
-	ctrl := drainControl(l)
-	if len(ctrl) != 1 || ctrl[0]["type"] != "song" {
+	ctrl := recvControl(t, l)
+	if ctrl["type"] != "song" {
 		t.Fatalf("expected song announce, got %+v", ctrl)
 	}
-	if ctrl[0]["songId"] != songID.String() {
-		t.Fatalf("announce songId = %s, want %s", ctrl[0]["songId"], songID)
+	if ctrl["songId"] != songID.String() {
+		t.Fatalf("announce songId = %s, want %s", ctrl["songId"], songID)
 	}
 }
 
@@ -162,8 +216,10 @@ func TestUnsubscribeStopsDelivery(t *testing.T) {
 
 	sh.AddChunk([]byte("x"))
 	select {
-	case <-l.Ch:
-		t.Fatal("chunk delivered after Unsubscribe")
+	case m := <-l.Send:
+		if m.Chunk != nil {
+			t.Fatal("chunk delivered after Unsubscribe")
+		}
 	default:
 	}
 }
@@ -177,8 +233,8 @@ func TestSendControlFanOut(t *testing.T) {
 
 	sh.SendControl([]byte(`{"type":"x"}`))
 	for _, l := range []*Listener{l1, l2} {
-		if got := <-l.ControlCh; got != `{"type":"x"}` {
-			t.Fatalf("control = %q", got)
+		if got := recvControl(t, l); got["type"] != "x" {
+			t.Fatalf("control = %+v", got)
 		}
 	}
 }
@@ -191,12 +247,14 @@ func TestSendControlToOne(t *testing.T) {
 	sh.Subscribe(l2)
 
 	sh.SendControlToOne(l1, []byte(`{"type":"y"}`))
-	if got := <-l1.ControlCh; got != `{"type":"y"}` {
-		t.Fatalf("l1 control = %q", got)
+	if got := recvControl(t, l1); got["type"] != "y" {
+		t.Fatalf("l1 control = %+v", got)
 	}
 	select {
-	case <-l2.ControlCh:
-		t.Fatal("l2 received one-to-one message")
+	case m := <-l2.Send:
+		if m.Ctrl != "" {
+			t.Fatal("l2 received one-to-one message")
+		}
 	default:
 	}
 }
@@ -238,6 +296,45 @@ func TestCancelInvokesContextCancel(t *testing.T) {
 	}
 }
 
+func TestBoundaryControlPrecedesChunks(t *testing.T) {
+	// At a song boundary the hub receives song_ended + song control frames and
+	// then the new song's audio chunks. The unified channel must deliver them
+	// in exactly that order: a chunk for the new song must never be observed
+	// before its announce.
+	sh := &StreamHub{MaxCap: 16}
+	sh.Active = true
+	l := newTestListener(sh)
+	sh.Subscribe(l)
+
+	sh.SendControl([]byte(`{"type":"song_ended","songId":"a"}`))
+	sh.SendControl([]byte(`{"type":"song","songId":"b"}`))
+	sh.AddChunk([]byte("b-chunk-1"))
+	sh.AddChunk([]byte("b-chunk-2"))
+
+	types := make([]string, 0, 4)
+	chunks := make([]string, 0, 2)
+	for i := 0; i < 4; i++ {
+		m := <-l.Send
+		if m.Chunk != nil {
+			types = append(types, "chunk")
+			chunks = append(chunks, string(m.Chunk))
+		} else {
+			var msg map[string]string
+			_ = json.Unmarshal([]byte(m.Ctrl), &msg)
+			types = append(types, msg["type"])
+		}
+	}
+	want := []string{"song_ended", "song", "chunk", "chunk"}
+	for i, w := range want {
+		if types[i] != w {
+			t.Fatalf("order = %v, want %v", types, want)
+		}
+	}
+	if chunks[0] != "b-chunk-1" || chunks[1] != "b-chunk-2" {
+		t.Fatalf("chunks = %v", chunks)
+	}
+}
+
 func TestHubRemoveClosesListeners(t *testing.T) {
 	h := NewHub()
 	sh := h.GetOrCreate(uuid.New(), 16)
@@ -246,7 +343,7 @@ func TestHubRemoveClosesListeners(t *testing.T) {
 
 	h.Remove(sh.StreamID)
 	select {
-	case _, ok := <-l.Ch:
+	case _, ok := <-l.Send:
 		if ok {
 			t.Fatal("listener channel not closed on hub Remove")
 		}

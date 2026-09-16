@@ -44,7 +44,8 @@ func testAudio(frames int) []byte {
 // fakeContent serves audio chunks exactly like the content-service HTTP audio
 // endpoint: honor Range, emit Content-Range totals, 416 past EOF.
 type fakeContent struct {
-	files map[string][]byte
+	files     map[string][]byte
+	chunkSize int
 }
 
 func (fc *fakeContent) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -66,7 +67,7 @@ func (fc *fakeContent) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
 		return
 	}
-	end := offset + testChunkSize - 1
+	end := offset + fc.chunkSize - 1
 	if end >= len(audio) {
 		end = len(audio) - 1
 	}
@@ -101,7 +102,7 @@ func newTestEnv(t *testing.T, files map[string][]byte) *testEnv {
 	}
 	t.Cleanup(func() { _ = sredis.Close() })
 
-	server := httptest.NewServer(&fakeContent{files: files})
+	server := httptest.NewServer(&fakeContent{files: files, chunkSize: testChunkSize})
 	t.Cleanup(server.Close)
 
 	hub := NewHub()
@@ -112,6 +113,53 @@ func newTestEnv(t *testing.T, files map[string][]byte) *testEnv {
 		SenderConfig{
 			ContentServiceURL: server.URL,
 			ChunkSize:         testChunkSize,
+			Bitrate:           128000,
+			BufferSeconds:     5,
+			PrefetchCount:     8,
+			NextSongPrefetch:  1,
+		},
+	)
+	return &testEnv{
+		svc:      svc,
+		hub:      hub,
+		sredis:   sredis,
+		raw:      raw,
+		streamID: uuid.New(),
+		mr:       mr,
+		server:   server,
+	}
+}
+
+// newTestEnvChunkSize builds an env whose sender delivers frame-aligned chunks
+// of roughly the given byte size (content client + fake server and sender
+// config all share it). The standard env uses testChunkSize (4096 B), whose
+// 261 ms chunks are smaller than the 800 ms pacing lead, so pacing never
+// engages there. Larger chunk sizes are needed to observe delivery pacing.
+func newTestEnvChunkSize(t *testing.T, file []byte, chunkSize int64) *testEnv {
+	t.Helper()
+
+	fake := &fakeContent{files: map[string][]byte{songID(1).String(): file}, chunkSize: int(chunkSize)}
+	mr := miniredis.RunT(t)
+	raw := goredis.NewClient(&goredis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = raw.Close() })
+
+	sredis, err := senderredis.NewClient(mr.Addr())
+	if err != nil {
+		t.Fatalf("sender redis client: %v", err)
+	}
+	t.Cleanup(func() { _ = sredis.Close() })
+
+	server := httptest.NewServer(fake)
+	t.Cleanup(server.Close)
+
+	hub := NewHub()
+	svc := NewService(
+		contenthttp.NewContentClient(server.URL, chunkSize),
+		sredis,
+		hub,
+		SenderConfig{
+			ContentServiceURL: server.URL,
+			ChunkSize:         chunkSize,
 			Bitrate:           128000,
 			BufferSeconds:     5,
 			PrefetchCount:     8,
@@ -189,13 +237,16 @@ func (e *testEnv) collectUntil(t *testing.T, l *Listener, done func(map[string]s
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		select {
-		case msg := <-l.ControlCh:
-			m := parseCtrl(msg)
-			if done(m) {
-				return m
+		case m, ok := <-l.Send:
+			if !ok || m.Ctrl == "" {
+				continue // ignore audio chunks on the unified channel
+			}
+			parsed := parseCtrl(m.Ctrl)
+			if done(parsed) {
+				return parsed
 			}
 		default:
-			if !e.isActive() && len(l.ControlCh) == 0 {
+			if !e.isActive() && len(l.Send) == 0 {
 				// avoid spinning forever after the stream self-deactivated
 			}
 			time.Sleep(5 * time.Millisecond)
@@ -211,8 +262,11 @@ func (e *testEnv) waitChunk(t *testing.T, l *Listener) []byte {
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		select {
-		case b := <-l.Ch:
-			return b
+		case m, ok := <-l.Send:
+			if !ok || m.Chunk == nil {
+				continue // ignore control frames on the unified channel
+			}
+			return m.Chunk
 		default:
 			time.Sleep(5 * time.Millisecond)
 		}
@@ -277,6 +331,50 @@ func TestServiceStart_QueueEmpty(t *testing.T) {
 	if err := e.svc.Start(e.streamID, false); err == nil {
 		t.Fatal("Start on empty queue should fail")
 	}
+}
+
+// TestServeStreamPacing_ReleasesSecondChunkByItsStart guards the per-song
+// pacing regression: chunk 2 must be released about one chunk-duration after
+// chunk 1 (chunkDur - pacingLead), not a full chunk later (which idles the
+// client ~3.3 s into every song). A 16384 B chunk is ~1.02 s of 128 kbps audio
+// (> the 800 ms pacing lead). Buggy math shipped chunk 2 at ~1.25 s; the fixed
+// pacing ships it at ~0.25 s.
+func TestServeStreamPacing_ReleasesSecondChunkByItsStart(t *testing.T) {
+	const chunkSize = int64(16384)
+	e := newTestEnvChunkSize(t, testAudio(2000), chunkSize)
+	s1 := songID(1)
+	e.seedQueue(t, queueItem{ItemID: e.streamID, SongID: s1})
+	l := e.subscribe()
+
+	if err := e.svc.Start(e.streamID, false); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	e.waitForSong(t, l, s1)
+
+	// Record wall-clock arrivals of the first two audio chunks.
+	var times []time.Time
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && len(times) < 2 {
+		select {
+		case m, ok := <-l.Send:
+			if !ok || m.Chunk == nil {
+				continue
+			}
+			times = append(times, time.Now())
+		default:
+			time.Sleep(2 * time.Millisecond)
+		}
+	}
+	if len(times) < 2 {
+		t.Fatalf("received only %d chunk(s)", len(times))
+	}
+	gap := times[1].Sub(times[0])
+	// Chunk is 40 frames (16680 B, ~1.045 s of audio). Fixed pacing gap ≈
+	// 1.045 s − 800 ms ≈ 245 ms. Buggy pacing gap ≈ 2·1.045 s − 800 ms ≈ 1.29 s.
+	if gap < 40*time.Millisecond || gap > 600*time.Millisecond {
+		t.Fatalf("gap between chunk 1 and 2 = %v, want ≈ 245 ms (chunk2 must be released by the start of its own audio, not its end)", gap)
+	}
+	_ = e.svc.Stop(e.streamID)
 }
 
 func TestServiceStart_DeliversSongAndChunks(t *testing.T) {
@@ -579,7 +677,7 @@ func TestService_SkipDoesNotEmitDeletedSongChunks(t *testing.T) {
 
 func TestFetchChunk_ContentRangeParsing(t *testing.T) {
 	audio := testAudio(5)
-	server := httptest.NewServer(&fakeContent{files: map[string][]byte{"s1": audio}})
+	server := httptest.NewServer(&fakeContent{files: map[string][]byte{"s1": audio}, chunkSize: testChunkSize})
 	defer server.Close()
 
 	c := contenthttp.NewContentClient(server.URL, testChunkSize)

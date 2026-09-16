@@ -36,13 +36,23 @@ type StreamHub struct {
 	cancel context.CancelFunc
 }
 
+// OutMsg is a single message on the unified listener channel.
+// A message carries either a binary audio chunk (Chunk set) or a text control
+// frame (Ctrl set), never both. Using one channel guarantees FIFO ordering
+// between control frames and audio chunks, eliminating the boundary race where
+// the old two-channel select could write a new song's audio before the "song"
+// announce.
+type OutMsg struct {
+	Chunk []byte // binary audio chunk (mutually exclusive with Ctrl)
+	Ctrl  string // text JSON control frame (empty when Chunk is set)
+}
+
 type Listener struct {
-	ID        string
-	Ch        chan []byte
-	ControlCh chan string
-	OwnerID   string // gateway-stamped uid (empty if anonymous)
-	Hub       *StreamHub
-	Once      bool // sent initial state
+	ID      string
+	Send    chan OutMsg
+	OwnerID string // gateway-stamped uid (empty if anonymous)
+	Hub     *StreamHub
+	Once    bool // sent initial state
 }
 
 func NewHub() *Hub {
@@ -87,7 +97,7 @@ func (h *Hub) Remove(streamID uuid.UUID) {
 
 	sh.mu.Lock()
 	for l := range sh.Listeners {
-		close(l.Ch)
+		close(l.Send)
 		delete(sh.Listeners, l)
 	}
 	sh.mu.Unlock()
@@ -141,7 +151,7 @@ func (sh *StreamHub) AddChunk(data []byte) {
 
 	for l := range sh.Listeners {
 		select {
-		case l.Ch <- data:
+		case l.Send <- OutMsg{Chunk: data}:
 		default:
 			log.Printf("[hub] dropping chunk for listener %s (slow)", l.ID)
 		}
@@ -153,11 +163,14 @@ func (sh *StreamHub) Subscribe(l *Listener) {
 	defer sh.mu.Unlock()
 	sh.Listeners[l] = struct{}{}
 
-	// Backfill latest chunk for a new joiner
+	// Backfill latest chunk for a new joiner.
+	// Both this chunk and the song announce below go through the same ordered
+	// channel, so the client always learns about the song before receiving its
+	// audio.
 	if len(sh.Chunks) > 0 {
 		latest := sh.Chunks[len(sh.Chunks)-1]
 		select {
-		case l.Ch <- latest:
+		case l.Send <- OutMsg{Chunk: latest}:
 		default:
 		}
 	}
@@ -166,7 +179,7 @@ func (sh *StreamHub) Subscribe(l *Listener) {
 	if sh.SongID != uuid.Nil && sh.Active {
 		ctrl, _ := json.Marshal(map[string]string{"type": "song", "songId": sh.SongID.String()})
 		select {
-		case l.ControlCh <- string(ctrl):
+		case l.Send <- OutMsg{Ctrl: string(ctrl)}:
 		default:
 		}
 	}
@@ -215,7 +228,7 @@ func (sh *StreamHub) SendControl(data []byte) {
 	msg := string(data)
 	for l := range sh.Listeners {
 		select {
-		case l.ControlCh <- msg:
+		case l.Send <- OutMsg{Ctrl: msg}:
 		default:
 		}
 	}
@@ -224,7 +237,7 @@ func (sh *StreamHub) SendControl(data []byte) {
 // SendControlToOne sends a control message to one specific listener.
 func (sh *StreamHub) SendControlToOne(l *Listener, data []byte) {
 	select {
-	case l.ControlCh <- string(data):
+	case l.Send <- OutMsg{Ctrl: string(data)}:
 	default:
 	}
 }
