@@ -124,12 +124,15 @@ async function main() {
   songFiles.forEach((f) => fs.unlinkSync(f))
 
   // 2. fill the queue so seams exercise both different-song and same-song repeats
-  for (const sid of [songIds[0], songIds[1], songIds[2], songIds[0]]) {
+  // (adjacent duplicate [A, A] first — a same-song re-announce after song_ended
+  // must RESTART from the beginning, not continue from the old buffer)
+  for (const sid of [songIds[0], songIds[0], songIds[1], songIds[2]]) {
     const r = await api('POST', `/api/streams/${streamId}/queue`, { song_id: sid }, auth)
     if (r.status !== 201) throw new Error(`queue add ${r.status}: ${r.body}`)
   }
   const q = await api('GET', `/api/streams/${streamId}/queue`, null, auth)
   console.log(`= queue: ${q.json.length} items -> ${q.json.map((x) => x.song_id.slice(0, 8)).join(', ')}`)
+  console.log(`  note: first seam is an ADJACENT DUPLICATE (${songIds[0].slice(0, 8)}) — repeat after end must restart`)
 
   // 3. phase B: wire-level WS capture (no decoder) — ordering invariant
   console.log('= phase B: wire-level WS capture')
@@ -147,10 +150,27 @@ async function main() {
     }
   }
 
-  // 4. phase C: browser MSE gap measurement (the actual symptom)
+  // 4. phase C: browser MSE gap measurement (the actual symptom).
+  //    C1: clean replay of the queue — the adjacent duplicate [A, A] seam MUST
+  //    restart from the beginning (repeatAfterEndContinuity must be 0), and all
+  //    seams must be gap-free.
+  //    C2: forced mid-song WS drop + reconnect — reconnect re-announce of the
+  //    SAME song must keep the live buffer (continuity), with no gaps.
   console.log('= phase C: browser MSE playback-gap measurement')
-  const mse = await runBrowser(streamId, auth)
-  console.log(`  seamContinuity=${mse.seamContinuityCount} stallEvents=${mse.stalls.length} jumps>${GAP_MS}ms=${mse.badJumps} maxStallMs=${mse.maxStallMs}`)
+  const mseClean = await runBrowser(streamId, auth, { dropAt: 0, winMs: 3 * DUR_S * 1000 + 8000 })
+  await api('POST', `/api/streams/${streamId}/stop`, {}, auth)
+  const mseDrop = await runBrowser(streamId, auth, { dropAt: 6000, reconAt: 7800, winMs: DUR_S * 1000 + 12000 })
+  const mse = {
+    stalls: mseClean.stalls.concat(mseDrop.stalls),
+    maxStallMs: Math.max(mseClean.maxStallMs, mseDrop.maxStallMs),
+    badJumps: Math.max(mseClean.badJumps, mseDrop.badJumps),
+    repeatContinuity: mseClean.repeatContinuity + mseDrop.repeatContinuity,
+    seamContinuityCount: mseClean.seamContinuityCount + mseDrop.seamContinuityCount,
+    error: mseClean.error || mseDrop.error,
+  }
+  console.log(`  C1(clean)  seamContinuity=${mseClean.seamContinuityCount} repeatAfterEndContinuity=${mseClean.repeatContinuity} stalls=${mseClean.stalls.length} maxStallMs=${mseClean.maxStallMs}`)
+  console.log(`  C2(drop)   seamContinuity=${mseDrop.seamContinuityCount} repeatAfterEndContinuity=${mseDrop.repeatContinuity} stalls=${mseDrop.stalls.length} maxStallMs=${mseDrop.maxStallMs}`)
+  console.log(`  combined   stallEvents=${mse.stalls.length} jumps>${GAP_MS}ms=${mse.badJumps} maxStallMs=${mse.maxStallMs}`)
   if (mse.error) console.log(`  phaseC-ERROR: ${mse.error}`)
   for (const s of mse.stalls.slice(0, 12)) {
     console.log(`    ${s.type} at ${s.songIdx}/${Math.round(s.at)}s +${s.spanMs}ms @${s.msSinceSeamMs}ms-after-seam`)
@@ -158,6 +178,7 @@ async function main() {
 
   const failures = []
   if (summary.chunkBeforeAnnounce > 0) failures.push(`wire: ${summary.chunkBeforeAnnounce} chunk(s) before announce`)
+  if (mse.repeatContinuity > 0) failures.push(`browser: adjacent duplicate continued old buffer instead of restarting (${mse.repeatContinuity}x)`)
   if (mse.badJumps > 0) failures.push(`browser: ${mse.badJumps} stalls > ${GAP_MS}ms`)
   console.log(failures.length ? `FAIL:\n  ${failures.join('\n  ')}` : 'PASS')
   await api('POST', `/api/streams/${streamId}/stop`, {}, auth)
@@ -237,6 +258,9 @@ const BROWSER_PIPELINE = `
   const wall0 = Date.now()
   let pumpTimer = 0
   let drops = [0]
+  let lastEnded = null       // songId emitted by the previous song_ended
+  let expectRepeatRestart = false // announce of the SAME song right after it ended
+  let repeatContinuity = 0
 
   function stallRecord(type, span) {
     const wall = Date.now() - wall0
@@ -244,13 +268,20 @@ const BROWSER_PIPELINE = `
   }
 
   function resetPlayback(sid) {
-    // mirror store.ts resetPlayback incl. the same-song continuity fix
+    // mirror store.ts resetPlayback incl. the same-song continuity fix:
+    // continuity is legal ONLY while the announced song is still the one being
+    // played (reconnect re-announce). A same-song announce after song_ended is
+    // a fresh occurrence and MUST rebuild — otherwise it continues from the old
+    // buffer (bug: song starts midway instead of from the beginning).
     if (sid && activeSongId === sid && audio && ms) {
+      if (expectRepeatRestart) repeatContinuity++
       wantAudio = true
       audio.play().catch(() => {})
       log('same song repeat -> continuity (no rebuild)')
       return
     }
+    if (expectRepeatRestart) log('repeat-after-end -> fresh rebuild (restart from beginning)')
+    expectRepeatRestart = false
     activeSongId = sid || null
     if (!audio) {
       setupMse()
@@ -313,10 +344,18 @@ const BROWSER_PIPELINE = `
 
   function handleText(j) {
     if (j.type === 'song') {
+      expectRepeatRestart = lastEnded != null && lastEnded === j.songId
+      log('song announce ' + String(j.songId).slice(0, 8) + ' expectRepeatRestart=' + expectRepeatRestart)
       songIdx++
       if (songIdx > 0) lastSeamWall = Date.now() - wall0
       resetPlayback(j.songId)
       wantAudio = true
+    } else if (j.type === 'song_ended') {
+      // mirror store.ts: end of occurrence invalidates the ongoing-song state,
+      // so a same-song announce afterwards rebuilds from the beginning
+      lastEnded = j.songId
+      log('song_ended ' + String(j.songId).slice(0, 8))
+      activeSongId = null
     } else if (j.type === 'state' && j.data && j.data.is_active && !wantAudio) {
       wantAudio = true
       if (!audio) resetPlayback(activeSongId)
@@ -351,16 +390,18 @@ const BROWSER_PIPELINE = `
       started = true
       current.send(JSON.stringify({ type: 'start', loop: false }))
       log('ws open, start sent')
-      // force a mid-song drop, then reconnect
-      setTimeout(() => {
-        log('forcing mid-song drop')
-        try { current.close() } catch {}
-      }, 6000)
-      setTimeout(() => {
-        log('reconnecting after drop')
-        current = socket()
-        current.onopen = () => current.send(JSON.stringify({ type: 'start', loop: false }))
-      }, 7800)
+      // force a mid-song drop, then reconnect (skipped when __DROP_AT__ is 0)
+      if (__DROP_AT__ > 0) {
+        setTimeout(() => {
+          log('forcing mid-song drop')
+          try { current.close() } catch {}
+        }, __DROP_AT__)
+        setTimeout(() => {
+          log('reconnecting after drop')
+          current = socket()
+          current.onopen = () => current.send(JSON.stringify({ type: 'start', loop: false }))
+        }, __RECON_AT__)
+      }
     }
     setTimeout(() => {
       try {
@@ -368,18 +409,22 @@ const BROWSER_PIPELINE = `
           stalls,
           maxStallMs: stalls.reduce((m, s) => Math.max(m, s.spanMs), 0),
           badJumps: stalls.filter((s) => (s.type === 'jump' || s.type === 'gap') && s.spanMs > GAP_MS).length,
+          repeatContinuity,
         }
         log('done set')
       } catch (e) {
         log('done ERR ' + e.message)
       }
-    }, 3 * __DUR_S__ * 1000 + 8000)
+    }, __WIN_MS__)
   }
 `
 
-function runBrowser(streamId, auth) {
+function runBrowser(streamId, auth, opts) {
   return new Promise((resolve, reject) => {
     const { chromium } = require('playwright')
+    const dropAt = opts.dropAt || 0
+    const reconAt = opts.reconAt || 0
+    const winMs = opts.winMs
     chromium
       .launch({ args: ['--autoplay-policy=no-user-gesture-required', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'] })
       .then(async (browser) => {
@@ -402,7 +447,11 @@ function runBrowser(streamId, auth) {
           const [name, ...rest] = token.split('=')
           await page.context().addCookies([{ name, value: rest.join('='), domain: 'localhost', path: '/' }])
         }
-        const src = BROWSER_PIPELINE.replace('__GAP_MS__', GAP_MS).replace('__STREAM_ID__', `'${streamId}'`).replace('__DUR_S__', DUR_S)
+        const src = BROWSER_PIPELINE.replace('__GAP_MS__', GAP_MS)
+          .replace('__STREAM_ID__', `'${streamId}'`)
+          .replace(/__DROP_AT__/g, dropAt)
+          .replace(/__RECON_AT__/g, reconAt)
+          .replace(/__WIN_MS__/g, winMs)
         await page.evaluate(src)
         await page.evaluate(() => window.__run())
         for (let i = 0; i < 240 && !(await page.evaluate(() => !!window.__done)); i++) {
@@ -416,7 +465,7 @@ function runBrowser(streamId, auth) {
         await browser.close()
         srv.close()
         if (!result) {
-          resolve({ stalls: [], maxStallMs: 0, badJumps: 0, seamContinuityCount: 0, dropStallMs: [], error: logs.join(' | ') || 'no data' })
+          resolve({ stalls: [], maxStallMs: 0, badJumps: 0, seamContinuityCount: 0, repeatContinuity: 0, dropStallMs: [], error: logs.join(' | ') || 'no data' })
           return
         }
         resolve({ ...result, seamContinuityCount: seams.length, dropStallMs: [] })

@@ -255,6 +255,11 @@ function handleMessage(msg: Record<string, unknown>) {
       break
     }
     case 'song_ended':
+      // The current occurrence is over: any announce of the same song that
+      // follows is a FRESH occurrence (adjacent duplicate, skip, loop wrap)
+      // and must restart from the beginning. Only a re-announce while the
+      // song is STILL playing (reconnect) may keep the live buffer.
+      activeSongId = null
       pushFeed('song_ended', msg.songId)
       break
     case 'stream_ended':
