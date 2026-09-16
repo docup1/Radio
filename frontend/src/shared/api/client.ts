@@ -9,13 +9,35 @@ export class ApiError extends Error {
   }
 }
 
-export async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(path, {
-    method,
-    credentials: 'include',
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  })
+const REQUEST_TIMEOUT_MS = 20_000
+
+// request performs a JSON API call. Every request is bounded by a timeout so a
+// stalled backend can never leave UI in an infinite loading state.
+export async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  timeoutMs: number = REQUEST_TIMEOUT_MS,
+): Promise<T> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  let res: Response
+  try {
+    res = await fetch(path, {
+      method,
+      credentials: 'include',
+      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    })
+  } catch (e) {
+    if (controller.signal.aborted) {
+      throw new ApiError('Превышено время ожидания', 0)
+    }
+    throw e
+  } finally {
+    clearTimeout(timer)
+  }
 
   if (!res.ok) {
     let message = res.statusText
