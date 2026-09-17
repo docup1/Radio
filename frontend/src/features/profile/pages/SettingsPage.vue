@@ -36,8 +36,8 @@ async function loadStream() {
   if (!streamId.value) return
   await get(streamId.value)
   if (stream.value) {
-    streamName.value = stream.value.name
-    streamDesc.value = stream.value.description
+    streamName.value = stream.value.name ?? ''
+    streamDesc.value = stream.value.description ?? ''
     loop.value = stream.value.loop
   }
 }

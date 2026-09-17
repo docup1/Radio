@@ -108,7 +108,7 @@ paths:
       tags:
       - auth
   /api/auth/password:
-    post:
+    put:
       consumes:
       - application/json
       parameters:

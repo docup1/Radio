@@ -11,7 +11,7 @@ import (
 )
 
 type passwordRequest struct {
-	OldPassword string `json:"old_password"`
+	OldPassword string `json:"current_password"`
 	NewPassword string `json:"new_password"`
 }
 

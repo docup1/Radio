@@ -126,7 +126,7 @@
             }
         },
         "/api/auth/password": {
-            "post": {
+            "put": {
                 "security": [
                     {
                         "bearerAuth": []

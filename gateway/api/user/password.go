@@ -13,5 +13,5 @@ import "net/http"
 //	@Success	200
 //	@Failure	400	{object}	ErrorResponse
 //	@Failure	401	{object}	ErrorResponse
-//	@Router		/api/auth/password [post]
+// @Router		/api/auth/password [put]
 func (h *Handler) password(w http.ResponseWriter, r *http.Request) { h.authProxy(true)(w, r) }
