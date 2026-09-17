@@ -18,7 +18,6 @@ const current = ref('')
 const next = ref('')
 const streamName = ref('')
 const streamDesc = ref('')
-const loop = ref(false)
 const savingStream = ref(false)
 
 const languages: { id: Locale; label: string }[] = [
@@ -38,7 +37,6 @@ async function loadStream() {
   if (stream.value) {
     streamName.value = stream.value.name ?? ''
     streamDesc.value = stream.value.description ?? ''
-    loop.value = stream.value.loop
   }
 }
 
@@ -75,11 +73,10 @@ async function onSaveStream() {
   if (!streamId.value) return
   savingStream.value = true
   try {
-    await update(streamId.value, {
-      name: streamName.value.trim(),
-      description: streamDesc.value.trim(),
-      loop: loop.value,
-    })
+     await update(streamId.value, {
+       name: streamName.value.trim(),
+       description: streamDesc.value.trim(),
+     })
     msg.value = t('settings.saved')
   } finally {
     savingStream.value = false
@@ -142,11 +139,7 @@ async function onSaveStream() {
             <span class="field-label">{{ t('settings.streamDescription') }}</span>
             <textarea v-model="streamDesc" class="input textarea" rows="3" />
           </label>
-          <label class="field field--inline">
-            <input v-model="loop" type="checkbox" />
-            <span class="field-label">{{ t('settings.streamLoop') }}</span>
-          </label>
-          <div class="row-actions">
+           <div class="row-actions">
             <Button
               :label="savingStream ? t('settings.saving') : t('settings.save')"
               variant="primary"

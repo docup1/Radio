@@ -155,7 +155,7 @@ export function closeRadio() {
 }
 
 export function start() {
-  send({ type: 'start', loop: !!radio.stream?.loop })
+  send({ type: 'start', loop: false })
 }
 
 export function stop() {
