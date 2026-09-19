@@ -18,7 +18,6 @@ import (
 //   - stream:{id}:queue  LIST of JSON {"item_id","song_id"} — index == position
 //   - stream:{id}:cursor STRING item_id — currently playing entry
 //   - stream:{id}:active STRING "1" with TTL — liveness marker (refreshed by sender heartbeat)
-//   - stream:{id}:loop   STRING "1"/"0" — loop flag snapshot for the active session
 type QueueStore struct {
 	rdb *goredis.Client
 }
@@ -37,7 +36,6 @@ type queueEntry struct {
 func queueKey(id uuid.UUID) string      { return fmt.Sprintf("stream:%s:queue", id) }
 func cursorKey(id uuid.UUID) string     { return fmt.Sprintf("stream:%s:cursor", id) }
 func activeKey(id uuid.UUID) string     { return fmt.Sprintf("stream:%s:active", id) }
-func loopKey(id uuid.UUID) string       { return fmt.Sprintf("stream:%s:loop", id) }
 
 // Add appends a song to the tail of the queue.
 func (s *QueueStore) Add(ctx context.Context, streamID, songID uuid.UUID) (*models.QueueItem, error) {
@@ -198,19 +196,10 @@ func (s *QueueStore) IsActive(ctx context.Context, streamID uuid.UUID) (bool, er
 	return n > 0, nil
 }
 
-// SetLoop stores the loop flag for the active session (read by sender on EOF).
-func (s *QueueStore) SetLoop(ctx context.Context, streamID uuid.UUID, loop bool) error {
-	v := "0"
-	if loop {
-		v = "1"
-	}
-	return s.rdb.Set(ctx, loopKey(streamID), v, 0).Err()
-}
-
-// Clear wipes all runtime keys for the stream (queue, cursor, active, loop).
+// Clear wipes all runtime keys for the stream (queue, cursor, active).
 func (s *QueueStore) Clear(ctx context.Context, streamID uuid.UUID) error {
 	return s.rdb.Del(ctx,
-		queueKey(streamID), cursorKey(streamID), activeKey(streamID), loopKey(streamID),
+		queueKey(streamID), cursorKey(streamID), activeKey(streamID),
 	).Err()
 }
 

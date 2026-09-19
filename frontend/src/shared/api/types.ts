@@ -86,7 +86,6 @@ export interface Stream {
   owner_id: string
   name: string
   description: string
-  loop: boolean
   current_song_id: string | null
   created_at: string
   updated_at: string
@@ -110,5 +109,4 @@ export interface QueueItem {
 export interface UpdateStreamInput {
   name?: string
   description?: string
-  loop?: boolean
 }

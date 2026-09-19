@@ -48,7 +48,6 @@ func (c *Client) Close() error {
 func queueKey(id uuid.UUID) string   { return fmt.Sprintf("stream:%s:queue", id) }
 func cursorKey(id uuid.UUID) string  { return fmt.Sprintf("stream:%s:cursor", id) }
 func activeKey(id uuid.UUID) string  { return fmt.Sprintf("stream:%s:active", id) }
-func loopKey(id uuid.UUID) string    { return fmt.Sprintf("stream:%s:loop", id) }
 func eventsKey(id uuid.UUID) string  { return fmt.Sprintf("stream:%s:events", id) }
 
 // --- Consumer Group ---
@@ -224,18 +223,6 @@ func (c *Client) SetCursor(ctx context.Context, streamID, itemID uuid.UUID) erro
 	return c.rdb.Set(ctx, cursorKey(streamID), itemID.String(), 0).Err()
 }
 
-// GetLoop returns the loop flag of the active session.
-func (c *Client) GetLoop(ctx context.Context, streamID uuid.UUID) (bool, error) {
-	val, err := c.rdb.Get(ctx, loopKey(streamID)).Result()
-	if err != nil {
-		if err == redis.Nil {
-			return false, nil
-		}
-		return false, fmt.Errorf("get loop %s: %w", streamID, err)
-	}
-	return val == "1", nil
-}
-
 // RefreshActive extends the active key TTL (heartbeat). No-op if key expired.
 func (c *Client) RefreshActive(ctx context.Context, streamID uuid.UUID) error {
 	return c.rdb.Expire(ctx, activeKey(streamID), activeTTL).Err()
@@ -250,10 +237,10 @@ func (c *Client) IsActive(ctx context.Context, streamID uuid.UUID) (bool, error)
 	return n > 0, nil
 }
 
-// Deactivate removes the active marker, cursor and loop key but leaves the
+// Deactivate removes the active marker, cursor but leaves the
 // queue intact so the stream can be restarted without re-adding songs.
 func (c *Client) Deactivate(ctx context.Context, streamID uuid.UUID) error {
-	_, err := c.rdb.Del(ctx, activeKey(streamID), cursorKey(streamID), loopKey(streamID)).Result()
+	_, err := c.rdb.Del(ctx, activeKey(streamID), cursorKey(streamID)).Result()
 	if err != nil {
 		return fmt.Errorf("deactivate %s: %w", streamID, err)
 	}
@@ -265,15 +252,6 @@ func (c *Client) SetActive(ctx context.Context, streamID uuid.UUID) error {
 	return c.rdb.Set(ctx, activeKey(streamID), "1", activeTTL).Err()
 }
 
-// SetLoop stores the loop flag (0 or 1) for the active session.
-func (c *Client) SetLoop(ctx context.Context, streamID uuid.UUID, loop bool) error {
-	v := "0"
-	if loop {
-		v = "1"
-	}
-	return c.rdb.Set(ctx, loopKey(streamID), v, 0).Err()
-}
-
 // QueueLen returns the length of the queue.
 func (c *Client) QueueLen(ctx context.Context, streamID uuid.UUID) (int64, error) {
 	n, err := c.rdb.LLen(ctx, queueKey(streamID)).Result()
@@ -283,10 +261,10 @@ func (c *Client) QueueLen(ctx context.Context, streamID uuid.UUID) (int64, error
 	return n, nil
 }
 
-// DeleteStreamState wipes all runtime keys of the stream (queue, cursor, active, loop, events).
+// DeleteStreamState wipes all runtime keys of the stream (queue, cursor, active, events).
 func (c *Client) DeleteStreamState(ctx context.Context, streamID uuid.UUID) error {
 	pipe := c.rdb.Pipeline()
-	pipe.Del(ctx, queueKey(streamID), cursorKey(streamID), activeKey(streamID), loopKey(streamID))
+	pipe.Del(ctx, queueKey(streamID), cursorKey(streamID), activeKey(streamID))
 	pipe.Del(ctx, eventsKey(streamID))
 	_, err := pipe.Exec(ctx)
 	return err

@@ -11,7 +11,6 @@ type CreateStreamRequest struct {
 type UpdateStreamRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
-	Loop        bool   `json:"loop"`
 }
 
 type AddToQueueRequest struct {
@@ -30,7 +29,6 @@ type StreamResponse struct {
 	ID            uuid.UUID  `json:"id"`
 	Name          string     `json:"name"`
 	Description   string     `json:"description,omitempty"`
-	Loop          bool       `json:"loop"`
 	CurrentSongID *uuid.UUID `json:"current_song_id,omitempty"`
 	CreatedAt     string     `json:"created_at"`
 	UpdatedAt     string     `json:"updated_at"`

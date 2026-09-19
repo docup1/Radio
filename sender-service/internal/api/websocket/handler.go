@@ -34,7 +34,7 @@ func NewHandler(hub *application.Hub, svc *application.Service) *Handler {
 //
 // Client → server (text JSON):
 //
-//	{"type":"start","loop":bool}   — owner starts the stream
+//	{"type":"start"}               — owner starts the stream
 //	{"type":"stop"}                — owner stops the stream
 //	{"type":"skip"}                — owner skips to the next song
 //	{"type":"ping"}                — keepalive / connectivity check
@@ -153,7 +153,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 type command struct {
 	Type string `json:"type"`
-	Loop bool   `json:"loop"`
 }
 
 func (h *Handler) handleCommand(streamID uuid.UUID, l *application.Listener, data []byte) {
@@ -171,7 +170,7 @@ func (h *Handler) handleCommand(streamID uuid.UUID, l *application.Listener, dat
 			h.reject(l, "только владелец может запустить стрим")
 			return
 		}
-		if err := h.svc.Start(streamID, cmd.Loop); err != nil {
+		if err := h.svc.Start(streamID); err != nil {
 			h.reject(l, err.Error())
 		}
 	case "stop":

@@ -156,12 +156,6 @@ func TestQueueStore_CursorActiveLoop(t *testing.T) {
 		t.Fatalf("active TTL = %v, want <= %v", ttl, ActiveTTL)
 	}
 
-	if err := q.SetLoop(ctx, id, true); err != nil {
-		t.Fatal(err)
-	}
-	if v := q.rdb.Get(ctx, "stream:"+id.String()+":loop").Val(); v != "1" {
-		t.Fatalf("loop key = %q, want 1", v)
-	}
 }
 
 func TestQueueStore_Clear(t *testing.T) {

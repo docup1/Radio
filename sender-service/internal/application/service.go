@@ -50,7 +50,7 @@ func NewService(content *contenthttp.ContentClient, rdb *redis.Client, hub *Hub,
 // --- WebSocket control (called from the WS handler, owner only) ---
 
 // Start begins playback from the head of the queue.
-func (s *Service) Start(streamID uuid.UUID, loop bool) error {
+func (s *Service) Start(streamID uuid.UUID) error {
 	s.opMu.Lock()
 	defer s.opMu.Unlock()
 
@@ -78,11 +78,8 @@ func (s *Service) Start(streamID uuid.UUID, loop bool) error {
 	if err := s.rdb.SetCursor(ctx, streamID, first.ItemID); err != nil {
 		return fmt.Errorf("set cursor: %w", err)
 	}
-	if err := s.rdb.SetLoop(ctx, streamID, loop); err != nil {
-		return fmt.Errorf("set loop: %w", err)
-	}
 
-	log.Printf("[sender] start stream=%s first song=%s loop=%v", streamID, first.SongID, loop)
+	log.Printf("[sender] start stream=%s first_song=%s", streamID, first.SongID)
 	s.StartHeartbeat(streamID)
 	s.OnSongChanged(streamID, first.SongID)
 	s.BroadcastState(streamID)
@@ -113,7 +110,7 @@ func (s *Service) Stop(streamID uuid.UUID) error {
 }
 
 // Skip advances to the next song immediately. Returns the new song ID or nil
-// if the queue is exhausted (without loop).
+// if the queue is exhausted.
 func (s *Service) Skip(streamID uuid.UUID) (*uuid.UUID, error) {
 	s.opMu.Lock()
 	defer s.opMu.Unlock()
@@ -146,12 +143,6 @@ func (s *Service) Skip(streamID uuid.UUID) (*uuid.UUID, error) {
 	}
 
 	next := nextEntry(entries, cursor)
-	if next == nil {
-		loop, _ := s.rdb.GetLoop(ctx, streamID)
-		if loop && len(entries) > 0 {
-			next = &entries[0]
-		}
-	}
 
 	if next == nil {
 		log.Printf("[sender] skip auto-stop %s (queue exhausted)", streamID)
@@ -353,7 +344,7 @@ fetch:
 }
 
 // handleSongEnd emits song_ended and then advances to the next song or
-// auto-stops when the queue is exhausted (and loop is off).
+// auto-stops when the queue is exhausted.
 func (s *Service) handleSongEnd(ctx context.Context, streamID uuid.UUID, sh *StreamHub) {
 	s.opMu.Lock()
 	defer s.opMu.Unlock()
@@ -382,16 +373,6 @@ func (s *Service) handleSongEnd(ctx context.Context, streamID uuid.UUID, sh *Str
 	}
 
 	next := nextEntry(entries, cursor)
-	if next == nil {
-		loop, err := s.rdb.GetLoop(ctx, streamID)
-		if err != nil {
-			log.Printf("[sender] get loop %s: %v", streamID, err)
-		}
-		if loop && len(entries) > 0 {
-			next = &entries[0]
-		}
-	}
-
 	if next == nil {
 		log.Printf("[sender] auto-stop %s (queue exhausted)", streamID)
 		sh.SendControl([]byte(`{"type":"stream_ended","message":"Очередь закончилась"}`))

@@ -328,7 +328,7 @@ func TestNextEntry(t *testing.T) {
 
 func TestServiceStart_QueueEmpty(t *testing.T) {
 	e := newTestEnv(t, map[string][]byte{songID(1).String(): testAudio(1000)})
-	if err := e.svc.Start(e.streamID, false); err == nil {
+	if err := e.svc.Start(e.streamID); err == nil {
 		t.Fatal("Start on empty queue should fail")
 	}
 }
@@ -346,7 +346,7 @@ func TestServeStreamPacing_ReleasesSecondChunkByItsStart(t *testing.T) {
 	e.seedQueue(t, queueItem{ItemID: e.streamID, SongID: s1})
 	l := e.subscribe()
 
-	if err := e.svc.Start(e.streamID, false); err != nil {
+	if err := e.svc.Start(e.streamID); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	e.waitForSong(t, l, s1)
@@ -383,7 +383,7 @@ func TestServiceStart_DeliversSongAndChunks(t *testing.T) {
 	e.seedQueue(t, queueItem{ItemID: e.streamID, SongID: s1})
 	l := e.subscribe()
 
-	if err := e.svc.Start(e.streamID, false); err != nil {
+	if err := e.svc.Start(e.streamID); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	e.waitForSong(t, l, s1)
@@ -412,7 +412,7 @@ func TestServiceSkip_AdvancesSong(t *testing.T) {
 	)
 	l := e.subscribe()
 
-	if err := e.svc.Start(e.streamID, false); err != nil {
+	if err := e.svc.Start(e.streamID); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	e.waitForSong(t, l, s1)
@@ -433,47 +433,13 @@ func TestServiceSkip_AdvancesSong(t *testing.T) {
 	_ = e.svc.Stop(e.streamID)
 }
 
-func TestServiceSkip_LoopWrapsToFirst(t *testing.T) {
-	e := newTestEnv(t, map[string][]byte{songID(1).String(): testAudio(4000), songID(2).String(): testAudio(4000)})
-	s1, s2 := songID(1), songID(2)
-	it1 := queueItem{ItemID: uuid.MustParse("00000000-0000-0000-0000-000000000001"), SongID: s1}
-	it2 := queueItem{ItemID: uuid.MustParse("00000000-0000-0000-0000-000000000002"), SongID: s2}
-	e.seedQueue(t, it1, it2)
-	l := e.subscribe()
-
-	if err := e.svc.Start(e.streamID, true); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	e.waitForSong(t, l, s1)
-	e.waitChunk(t, l)
-
-	if _, err := e.svc.Skip(e.streamID); err != nil {
-		t.Fatalf("Skip 1: %v", err)
-	}
-	e.waitForSong(t, l, s2)
-	e.waitChunk(t, l)
-
-	if _, err := e.svc.Skip(e.streamID); err != nil {
-		t.Fatalf("Skip 2: %v", err)
-	}
-	e.waitForSong(t, l, s1)
-	e.waitChunk(t, l)
-
-	// cursor wrapped to the first entry
-	cursor, _ := e.sredis.GetCursor(context.Background(), e.streamID)
-	if cursor != it1.ItemID {
-		t.Fatalf("cursor = %s, want back to first item %s", cursor, it1.ItemID)
-	}
-	_ = e.svc.Stop(e.streamID)
-}
-
 func TestServiceSkip_AutoStopAtQueueEnd(t *testing.T) {
 	e := newTestEnv(t, map[string][]byte{songID(1).String(): testAudio(4000)})
 	s1 := songID(1)
 	e.seedQueue(t, queueItem{ItemID: e.streamID, SongID: s1})
 	l := e.subscribe()
 
-	if err := e.svc.Start(e.streamID, false); err != nil {
+	if err := e.svc.Start(e.streamID); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	e.waitForSong(t, l, s1)
@@ -505,7 +471,7 @@ func TestServiceNaturalAdvance_EndsAndDeactivates(t *testing.T) {
 	)
 	l := e.subscribe()
 
-	if err := e.svc.Start(e.streamID, false); err != nil {
+	if err := e.svc.Start(e.streamID); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	e.waitForSong(t, l, s1)
@@ -535,7 +501,7 @@ func TestServiceNaturalAdvance_EmitsSongEndedBeforeNextSong(t *testing.T) {
 	)
 	l := e.subscribe()
 
-	if err := e.svc.Start(e.streamID, false); err != nil {
+	if err := e.svc.Start(e.streamID); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	e.waitForSong(t, l, s1)
@@ -559,7 +525,7 @@ func TestServiceStop_DeactivatesAndNotifies(t *testing.T) {
 	e.seedQueue(t, queueItem{ItemID: e.streamID, SongID: s1})
 	l := e.subscribe()
 
-	if err := e.svc.Start(e.streamID, false); err != nil {
+	if err := e.svc.Start(e.streamID); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	e.waitForSong(t, l, s1)
@@ -591,7 +557,7 @@ func TestServiceStatus(t *testing.T) {
 		t.Fatalf("status before start = %+v", st)
 	}
 
-	if err := e.svc.Start(e.streamID, false); err != nil {
+	if err := e.svc.Start(e.streamID); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	st, err = e.svc.Status(context.Background(), e.streamID)
@@ -657,7 +623,7 @@ func TestService_SkipDoesNotEmitDeletedSongChunks(t *testing.T) {
 	)
 	l := e.subscribe()
 
-	if err := e.svc.Start(e.streamID, false); err != nil {
+	if err := e.svc.Start(e.streamID); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	e.waitChunk(t, l)

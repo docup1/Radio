@@ -119,19 +119,14 @@ func (s *Service) Feed(ctx context.Context, q string, limit, offset int) ([]Feed
 	return items, nil
 }
 
-func (s *Service) UpdateStream(ctx context.Context, id uuid.UUID, name, description string, loop bool) (*models.Stream, error) {
+func (s *Service) UpdateStream(ctx context.Context, id uuid.UUID, name, description string) (*models.Stream, error) {
 	stream := &models.Stream{
 		ID:          id,
 		Name:        name,
 		Description: description,
-		Loop:        loop,
 	}
 	if err := s.repos.Streams.Update(ctx, stream); err != nil {
 		return nil, err
-	}
-	// Keep the active-session loop snapshot in sync.
-	if err := s.q.SetLoop(ctx, id, loop); err != nil {
-		log.Printf("[service] sync loop flag %s: %v", id, err)
 	}
 	return s.repos.Streams.GetByID(ctx, id)
 }
@@ -147,8 +142,7 @@ func (s *Service) DeleteStream(ctx context.Context, id uuid.UUID) error {
 
 // Start activates a stream: marks it live and tells the sender to serve the first song.
 func (s *Service) Start(ctx context.Context, streamID uuid.UUID) error {
-	stream, err := s.repos.Streams.GetByID(ctx, streamID)
-	if err != nil {
+	if _, err := s.repos.Streams.GetByID(ctx, streamID); err != nil {
 		return err
 	}
 
@@ -173,9 +167,6 @@ func (s *Service) Start(ctx context.Context, streamID uuid.UUID) error {
 		return err
 	}
 	if err := s.q.SetCursor(ctx, streamID, first.ID); err != nil {
-		return err
-	}
-	if err := s.q.SetLoop(ctx, streamID, stream.Loop); err != nil {
 		return err
 	}
 	return s.pub.PublishStreamStarted(ctx, streamID, first.ID, first.SongID)

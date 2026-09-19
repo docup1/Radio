@@ -87,7 +87,6 @@ func toStreamResponse(st *models.Stream, currentSongID *uuid.UUID) dto.StreamRes
 		ID:            st.ID,
 		Name:          st.Name,
 		Description:   st.Description,
-		Loop:          st.Loop,
 		CurrentSongID: currentSongID,
 		CreatedAt:     st.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt:     st.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -163,7 +162,7 @@ func (h *Handler) updateStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stream, err := h.svc.UpdateStream(r.Context(), id, req.Name, req.Description, req.Loop)
+	stream, err := h.svc.UpdateStream(r.Context(), id, req.Name, req.Description)
 	if err != nil {
 		WriteServiceError(w, err)
 		return

@@ -17,15 +17,15 @@ type StreamRepository struct {
 
 func (r *StreamRepository) Create(ctx context.Context, s *models.Stream) error {
 	_, err := r.DB.ExecContext(ctx,
-		`INSERT INTO streams (id, name, description, loop) VALUES ($1, $2, $3, $4)`,
-		s.ID, s.Name, s.Description, s.Loop,
+		`INSERT INTO streams (id, name, description) VALUES ($1, $2, $3)`,
+		s.ID, s.Name, s.Description,
 	)
 	return err
 }
 
 func (r *StreamRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Stream, error) {
 	row := r.DB.QueryRowContext(ctx,
-		`SELECT id, name, description, loop, created_at, updated_at FROM streams WHERE id = $1`, id,
+		`SELECT id, name, description, created_at, updated_at FROM streams WHERE id = $1`, id,
 	)
 	s, err := scanStream(row)
 	if err == sql.ErrNoRows {
@@ -40,7 +40,7 @@ func (r *StreamRepository) ListByIDs(ctx context.Context, ids []uuid.UUID) ([]*m
 		return []*models.Stream{}, nil
 	}
 	rows, err := r.DB.QueryContext(ctx,
-		`SELECT id, name, description, loop, created_at, updated_at FROM streams WHERE id = ANY($1::uuid[])`,
+		`SELECT id, name, description, created_at, updated_at FROM streams WHERE id = ANY($1::uuid[])`,
 		uuidArray(ids),
 	)
 	if err != nil {
@@ -67,7 +67,7 @@ func (r *StreamRepository) SearchActive(ctx context.Context, ids []uuid.UUID, q 
 	}
 	q = strings.TrimSpace(q)
 	query := `
-		SELECT id, name, description, loop, created_at, updated_at,
+		SELECT id, name, description, created_at, updated_at,
 		       GREATEST(similarity(name, $2), COALESCE(similarity(description, $2), 0)) AS sim
 		FROM streams
 		WHERE id = ANY($1::uuid[])
@@ -108,8 +108,8 @@ func (r *StreamRepository) SearchActive(ctx context.Context, ids []uuid.UUID, q 
 
 func (r *StreamRepository) Update(ctx context.Context, s *models.Stream) error {
 	res, err := r.DB.ExecContext(ctx,
-		`UPDATE streams SET name=$1, description=$2, loop=$3, updated_at=now() WHERE id=$4`,
-		s.Name, s.Description, s.Loop, s.ID,
+		`UPDATE streams SET name=$1, description=$2, updated_at=now() WHERE id=$3`,
+		s.Name, s.Description, s.ID,
 	)
 	if err != nil {
 		return err
@@ -139,7 +139,7 @@ type rowScanner interface {
 
 func scanStream(sc rowScanner) (*models.Stream, error) {
 	var s models.Stream
-	err := sc.Scan(&s.ID, &s.Name, &s.Description, &s.Loop, &s.CreatedAt, &s.UpdatedAt)
+	err := sc.Scan(&s.ID, &s.Name, &s.Description, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}

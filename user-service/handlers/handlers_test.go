@@ -285,7 +285,7 @@ func TestPassword_Success(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	req := httptest.NewRequest(http.MethodPut, "/password", bytes.NewReader([]byte(
-		`{"old_password":"oldpass123","new_password":"newpass123"}`)))
+		`{"current_password":"oldpass123","new_password":"newpass123"}`)))
 	rec := httptest.NewRecorder()
 	PasswordHandler(h.db, h.cfg, infra.NewHasher(4))(rec, req, infra.AuthContext{UserID: userID})
 	if rec.Code != http.StatusNoContent {
@@ -302,7 +302,7 @@ func TestPassword_WrongOldPassword(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"password"}).AddRow(string(oldHash)))
 
 	req := httptest.NewRequest(http.MethodPut, "/password", bytes.NewReader([]byte(
-		`{"old_password":"nope","new_password":"newpass123"}`)))
+		`{"current_password":"nope","new_password":"newpass123"}`)))
 	rec := httptest.NewRecorder()
 	PasswordHandler(h.db, h.cfg, infra.NewHasher(4))(rec, req, infra.AuthContext{UserID: userID})
 	if rec.Code != http.StatusBadRequest {
@@ -313,7 +313,7 @@ func TestPassword_WrongOldPassword(t *testing.T) {
 func TestPassword_WeakNewPassword(t *testing.T) {
 	h := newHarness(t)
 	req := httptest.NewRequest(http.MethodPut, "/password", bytes.NewReader([]byte(
-		`{"old_password":"oldpass123","new_password":"123"}`)))
+		`{"current_password":"oldpass123","new_password":"123"}`)))
 	rec := httptest.NewRecorder()
 	PasswordHandler(h.db, h.cfg, infra.NewHasher(4))(rec, req, infra.AuthContext{UserID: "u"})
 	if rec.Code != http.StatusBadRequest {

@@ -89,7 +89,6 @@ const ru = {
   'settings.stream': 'Мой стрим',
   'settings.streamName': 'Название',
   'settings.streamDescription': 'Описание',
-  'settings.streamLoop': 'Зациклить',
   'settings.save': 'Сохранить',
   'settings.saving': 'Сохранение…',
   'settings.saved': 'Сохранено',

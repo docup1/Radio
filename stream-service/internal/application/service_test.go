@@ -240,7 +240,7 @@ func TestGetStream_NotFound(t *testing.T) {
 func TestStart_ActivatesAndPublishes(t *testing.T) {
 	s := newTestService(t, nil)
 	streamID := uuid.New()
-	s.streams.byID[streamID] = &models.Stream{ID: streamID, Loop: false}
+	s.streams.byID[streamID] = &models.Stream{ID: streamID}
 	addQueue(t, s, streamID, 2)
 
 	if err := s.svc.Start(s.ctx, streamID); err != nil {
@@ -392,17 +392,14 @@ func TestHashtags(t *testing.T) {
 func TestUpdateStream_SyncsLoopSnapshot(t *testing.T) {
 	s := newTestService(t, nil)
 	streamID := uuid.New()
-	s.streams.byID[streamID] = &models.Stream{ID: streamID, Loop: false}
+	s.streams.byID[streamID] = &models.Stream{ID: streamID}
 
-	updated, err := s.svc.UpdateStream(s.ctx, streamID, "name", "desc", true)
+	updated, err := s.svc.UpdateStream(s.ctx, streamID, "name", "desc")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !updated.Loop || updated.Name != "name" || updated.Description != "desc" {
-		t.Fatalf("updated = %+v", updated)
-	}
-	if v := s.rdb.Get(s.ctx, "stream:"+streamID.String()+":loop").Val(); v != "1" {
-		t.Fatalf("loop snapshot = %q, want 1", v)
+	if updated.Name != "name" || updated.Description != "desc" {
+		t.Fatalf("updated = %+v, want name=name desc=desc", updated)
 	}
 }
 
